@@ -1,27 +1,28 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db'); // Import our DB connection function
+const connectDB = require('./config/db');
 
-// Load environment variables from .env file
+// 1. Import your new route file
+const authRoutes = require('./routes/authRoutes');
+
 dotenv.config();
-
-// Connect to the database
-// We will activate this line after we get our MONGO_URI from Atlas
- connectDB();
+connectDB();
 
 const app = express();
 
-// Middleware to allow our server to accept and parse JSON data from requests
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
 
-// A simple test route to confirm the server is running
 app.get('/', (req, res) => {
   res.send('Backend API is running...');
 });
 
-// We will add our real application routes here later
+// 2. Tell the app to use the routes
+// Any request to a URL starting with '/api/auth'
+// will now be handled by the authRoutes file.
+app.use('/api/auth', authRoutes);
+
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
