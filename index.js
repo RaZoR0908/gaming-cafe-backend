@@ -4,7 +4,8 @@ const connectDB = require('./config/db');
 
 // 1. Import all your route files
 const authRoutes = require('./routes/authRoutes');
-const cafeRoutes = require('./routes/cafeRoutes'); // <-- Add this line
+const cafeRoutes = require('./routes/cafeRoutes');
+const bookingRoutes = require('./routes/bookingRoutes'); // <-- Add this line
 
 dotenv.config();
 connectDB();
@@ -20,10 +21,9 @@ app.get('/', (req, res) => {
 });
 
 // 2. Tell the app to use the routes
-// Any request to a URL starting with '/api/auth' will be handled by the authRoutes file.
 app.use('/api/auth', authRoutes);
-// Any request to a URL starting with '/api/cafes' will be handled by the cafeRoutes file.
-app.use('/api/cafes', cafeRoutes); // <-- Add this line
+app.use('/api/cafes', cafeRoutes);
+app.use('/api/bookings', bookingRoutes); // <-- Add this line
 
 
 app.listen(PORT, () => {
