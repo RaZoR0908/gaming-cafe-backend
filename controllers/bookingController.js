@@ -1,11 +1,7 @@
 const Booking = require('../models/bookingModel');
 const Cafe = require('../models/cafeModel');
 
-/**
- * @desc    Create a new booking
- * @route   POST /api/bookings
- * @access  Private/Customer
- */
+// ... (existing createBooking, getMyBookings, and getOwnerBookings functions are here)
 const createBooking = async (req, res) => {
   try {
     const { cafeId, systemType, bookingDate, startTime, duration, totalPrice } =
@@ -32,22 +28,70 @@ const createBooking = async (req, res) => {
   }
 };
 
-// ADD THIS NEW FUNCTION
-/**
- * @desc    Get bookings for the logged-in customer
- * @route   GET /api/bookings/my-bookings
- * @access  Private/Customer
- */
 const getMyBookings = async (req, res) => {
   try {
-    // 1. Find all bookings in the database where the 'customer' field
-    // matches the ID of the logged-in user.
     const bookings = await Booking.find({ customer: req.user._id });
-
-    // 2. Send the list of bookings back as a JSON response.
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+const getOwnerBookings = async (req, res) => {
+  try {
+    const cafeId = req.params.cafeId;
+    const cafe = await Cafe.findById(cafeId);
+    if (!cafe) {
+      res.status(404);
+      throw new Error('Cafe not found');
+    }
+    if (cafe.owner.toString() !== req.user._id.toString()) {
+      res.status(401);
+      throw new Error('User not authorized to view these bookings');
+    }
+    const bookings = await Booking.find({ cafe: cafeId });
+    res.json(bookings);
+  } catch (error) {
+    res.status(res.statusCode || 500).json({ message: error.message });
+  }
+};
+
+// ADD THIS NEW FUNCTION
+/**
+ * @desc    Update a booking's status (e.g., to 'Cancelled' or 'Completed')
+ * @route   PUT /api/bookings/:id
+ * @access  Private/Owner
+ */
+const updateBookingStatus = async (req, res) => {
+  try {
+    // 1. Get the new status from the request body.
+    const { status } = req.body;
+
+    // 2. Find the booking to be updated by its ID from the URL parameter.
+    const booking = await Booking.findById(req.params.id);
+
+    // 3. If the booking is found...
+    if (booking) {
+      // 4. IMPORTANT SECURITY CHECK: Make sure the logged-in user is the owner of this booking.
+      if (booking.owner.toString() !== req.user._id.toString()) {
+        res.status(401); // Unauthorized
+        throw new Error('User not authorized to update this booking');
+      }
+
+      // 5. Update the booking's status field.
+      booking.status = status;
+
+      // 6. Save the updated booking to the database.
+      const updatedBooking = await booking.save();
+
+      // 7. Send the updated booking back as the response.
+      res.json(updatedBooking);
+    } else {
+      res.status(404);
+      throw new Error('Booking not found');
+    }
+  } catch (error) {
+    res.status(res.statusCode || 500).json({ message: error.message });
   }
 };
 
@@ -55,5 +99,7 @@ const getMyBookings = async (req, res) => {
 // UPDATE THE EXPORTS AT THE BOTTOM
 module.exports = {
   createBooking,
-  getMyBookings, // Add the new function here
+  getMyBookings,
+  getOwnerBookings,
+  updateBookingStatus, // Add the new function here
 };
