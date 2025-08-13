@@ -25,7 +25,7 @@ const cafeSchema = mongoose.Schema(
         type: String,
       },
     ],
-    // NEW STRUCTURE: We will store an array of rooms (e.g., AC, Non-AC).
+    // We will store an array of rooms (e.g., AC, Non-AC).
     // Each room will contain its own list of gaming systems.
     rooms: [
       {
@@ -50,6 +50,20 @@ const cafeSchema = mongoose.Schema(
         ],
       },
     ],
+
+    // ADD THIS NEW FIELD FOR LOCATION
+    location: {
+      type: {
+        type: String, // Don't change this. It must be 'Point'.
+        enum: ['Point'],
+        required: true,
+      },
+      coordinates: {
+        type: [Number], // Array of numbers for [longitude, latitude]
+        required: true,
+      },
+    },
+
     // The cafe's standard opening and closing times.
     openingTime: {
       type: String, // e.g., '10:00 AM'
@@ -70,6 +84,11 @@ const cafeSchema = mongoose.Schema(
     timestamps: true, // Automatically adds createdAt and updatedAt
   }
 );
+
+// ADD THIS LINE TO CREATE THE SPECIAL GEOSPATIAL INDEX
+// This makes location-based queries extremely fast.
+cafeSchema.index({ location: '2dsphere' });
+
 
 const Cafe = mongoose.model('Cafe', cafeSchema);
 

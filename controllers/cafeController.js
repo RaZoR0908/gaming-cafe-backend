@@ -7,8 +7,10 @@ const Cafe = require('../models/cafeModel');
  */
 const createCafe = async (req, res) => {
   try {
-    const { name, address, photos, rooms, openingTime, closingTime } = req.body;
+    // Get all the cafe details from the request body, including the new 'location' field.
+    const { name, address, photos, rooms, openingTime, closingTime, location } = req.body;
 
+    // Create a new cafe object in memory.
     const cafe = new Cafe({
       owner: req.user._id,
       name,
@@ -17,16 +19,20 @@ const createCafe = async (req, res) => {
       rooms,
       openingTime,
       closingTime,
+      location, // Add the new location field here
     });
 
+    // Save the new cafe object to the database.
     const createdCafe = await cafe.save();
+
+    // Send back a 201 (Created) status and the new cafe's data.
     res.status(201).json(createdCafe);
   } catch (error) {
+    // If there's an error (e.g., missing required fields), send an error response.
     res.status(400).json({ message: error.message });
   }
 };
 
-// ADD THIS NEW FUNCTION
 /**
  * @desc    Fetch all cafes
  * @route   GET /api/cafes
@@ -34,19 +40,13 @@ const createCafe = async (req, res) => {
  */
 const getCafes = async (req, res) => {
   try {
-    // 1. Find all cafes in the database.
-    // We only want to show cafes that the owner has marked as 'active'.
     const cafes = await Cafe.find({ isActive: true });
-
-    // 2. Send the list of cafes back as a JSON response.
     res.json(cafes);
   } catch (error) {
-    // If there's an error, send an error response.
     res.status(500).json({ message: 'Server Error' });
   }
 };
 
-// ADD THIS NEW FUNCTION
 /**
  * @desc    Fetch a single cafe by its ID
  * @route   GET /api/cafes/:id
@@ -54,24 +54,17 @@ const getCafes = async (req, res) => {
  */
 const getCafeById = async (req, res) => {
   try {
-    // 1. Find the cafe in the database using the ID from the URL parameters.
     const cafe = await Cafe.findById(req.params.id);
-
-    // 2. If a cafe with that ID is found...
     if (cafe) {
-      // ...send it back as a JSON response.
       res.json(cafe);
     } else {
-      // 3. If no cafe is found, send a 404 Not Found error.
       res.status(404).json({ message: 'Cafe not found' });
     }
   } catch (error) {
-    // If the provided ID is not a valid MongoDB ID format, this will trigger.
     res.status(500).json({ message: 'Server Error' });
   }
 };
 
-// ADD THIS NEW FUNCTION
 /**
  * @desc    Update a cafe
  * @route   PUT /api/cafes/:id
@@ -79,31 +72,22 @@ const getCafeById = async (req, res) => {
  */
 const updateCafe = async (req, res) => {
   try {
-    // 1. Find the cafe to be updated by its ID.
     const cafe = await Cafe.findById(req.params.id);
-
-    // 2. If the cafe exists...
     if (cafe) {
-      // 3. IMPORTANT SECURITY CHECK: Make sure the logged-in user is the owner of this cafe.
       if (cafe.owner.toString() !== req.user._id.toString()) {
-        res.status(401); // Unauthorized
+        res.status(401);
         throw new Error('User not authorized to update this cafe');
       }
-
-      // 4. Update the cafe fields with the new data from the request body.
-      // If a field isn't provided in the request, it will keep its old value.
       cafe.name = req.body.name || cafe.name;
       cafe.address = req.body.address || cafe.address;
       cafe.photos = req.body.photos || cafe.photos;
       cafe.rooms = req.body.rooms || cafe.rooms;
+      // Also update the location if it's provided
+      cafe.location = req.body.location || cafe.location;
       cafe.openingTime = req.body.openingTime || cafe.openingTime;
       cafe.closingTime = req.body.closingTime || cafe.closingTime;
       cafe.isActive = req.body.isActive !== undefined ? req.body.isActive : cafe.isActive;
-
-      // 5. Save the updated cafe to the database.
       const updatedCafe = await cafe.save();
-
-      // 6. Send the updated cafe back as the response.
       res.json(updatedCafe);
     } else {
       res.status(404);
@@ -113,6 +97,7 @@ const updateCafe = async (req, res) => {
     res.status(res.statusCode || 500).json({ message: error.message });
   }
 };
+
 /**
  * @desc    Delete a cafe
  * @route   DELETE /api/cafes/:id
@@ -120,21 +105,13 @@ const updateCafe = async (req, res) => {
  */
 const deleteCafe = async (req, res) => {
   try {
-    // 1. Find the cafe to be deleted by its ID.
     const cafe = await Cafe.findById(req.params.id);
-
-    // 2. If the cafe exists...
     if (cafe) {
-      // 3. IMPORTANT SECURITY CHECK: Make sure the logged-in user is the owner of this cafe.
       if (cafe.owner.toString() !== req.user._id.toString()) {
-        res.status(401); // Unauthorized
+        res.status(401);
         throw new Error('User not authorized to delete this cafe');
       }
-
-      // 4. Delete the cafe from the database.
       await cafe.deleteOne();
-
-      // 5. Send back a success message.
       res.json({ message: 'Cafe removed' });
     } else {
       res.status(404);
@@ -145,13 +122,57 @@ const deleteCafe = async (req, res) => {
   }
 };
 
+// ADD THIS NEW FUNCTION
+/**
+ * @desc    Get cafes within a certain radius
+ * @route   GET /api/cafes/near-me?lng=...&lat=...&distance=...
+ * @access  Public
+ */
+const getCafesNearMe = async (req, res) => {
+  try {
+    // 1. Get longitude, latitude, and distance from the URL query parameters.
+    const { lng, lat, distance } = req.query;
+
+    // 2. Check that all required parameters were provided.
+    if (!lng || !lat || !distance) {
+      res.status(400);
+      throw new Error('Please provide longitude, latitude, and distance in km');
+    }
+
+    // 3. Use MongoDB's special geospatial query to find cafes.
+    const cafes = await Cafe.find({
+      location: {
+        // $nearSphere finds documents within a certain distance on a sphere (the Earth).
+        $nearSphere: {
+          // $geometry specifies the user's location as a GeoJSON Point.
+          $geometry: {
+            type: 'Point',
+            coordinates: [parseFloat(lng), parseFloat(lat)], // [longitude, latitude]
+          },
+          // $maxDistance specifies the search radius in meters.
+          $maxDistance: parseInt(distance) * 1000, // We convert the distance from km to meters.
+        },
+      },
+      isActive: true, // Only find active cafes.
+    });
+
+    // 4. Send the results back.
+    res.json({
+      count: cafes.length,
+      data: cafes,
+    });
+  } catch (error) {
+    res.status(res.statusCode || 500).json({ message: error.message });
+  }
+};
 
 
 // UPDATE THE EXPORTS AT THE BOTTOM
 module.exports = {
   createCafe,
   getCafes,
-  getCafeById, 
+  getCafeById,
   updateCafe,
   deleteCafe,
+  getCafesNearMe, // Add the new function here
 };
