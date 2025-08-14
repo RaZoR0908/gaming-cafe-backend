@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-// 1. Update the import to include the new getCafesNearMe function
 const {
   createCafe,
   getCafes,
@@ -8,24 +7,32 @@ const {
   updateCafe,
   deleteCafe,
   getCafesNearMe,
+  getMyCafe,
 } = require('../controllers/cafeController');
 const { protect, isOwner } = require('../middleware/authMiddleware');
 
-// Routes for the base URL ('/api/cafes')
+// --- Grouping routes for better organization ---
+
+// Base route: /api/cafes
 router
   .route('/')
-  .post(protect, isOwner, createCafe)
-  .get(getCafes);
+  .get(getCafes) // Public
+  .post(protect, isOwner, createCafe); // Protected
 
-// ADD THIS NEW ROUTE for finding nearby cafes.
-// This must come BEFORE the /:id route to work correctly.
-router.route('/near-me').get(getCafesNearMe);
+// --- IMPORTANT: Specific routes must come BEFORE generic routes ---
 
-// Routes for a specific cafe ID ('/api/cafes/:id')
+// Specific route: /api/cafes/my-cafe
+router.route('/my-cafe').get(protect, isOwner, getMyCafe); // Protected
+
+// Specific route: /api/cafes/near-me
+router.route('/near-me').get(getCafesNearMe); // Public
+
+// Generic route with a parameter: /api/cafes/:id
+// This MUST come last.
 router
   .route('/:id')
-  .get(getCafeById)
-  .put(protect, isOwner, updateCafe)
-  .delete(protect, isOwner, deleteCafe);
+  .get(getCafeById) // Public
+  .put(protect, isOwner, updateCafe) // Protected
+  .delete(protect, isOwner, deleteCafe); // Protected
 
 module.exports = router;

@@ -7,28 +7,13 @@ const Cafe = require('../models/cafeModel');
  */
 const createCafe = async (req, res) => {
   try {
-    // Get all the cafe details from the request body, including the new 'location' field.
     const { name, address, photos, rooms, openingTime, closingTime, location } = req.body;
-
-    // Create a new cafe object in memory.
     const cafe = new Cafe({
-      owner: req.user._id,
-      name,
-      address,
-      photos,
-      rooms,
-      openingTime,
-      closingTime,
-      location, // Add the new location field here
+      owner: req.user._id, name, address, photos, rooms, openingTime, closingTime, location,
     });
-
-    // Save the new cafe object to the database.
     const createdCafe = await cafe.save();
-
-    // Send back a 201 (Created) status and the new cafe's data.
     res.status(201).json(createdCafe);
   } catch (error) {
-    // If there's an error (e.g., missing required fields), send an error response.
     res.status(400).json({ message: error.message });
   }
 };
@@ -55,11 +40,7 @@ const getCafes = async (req, res) => {
 const getCafeById = async (req, res) => {
   try {
     const cafe = await Cafe.findById(req.params.id);
-    if (cafe) {
-      res.json(cafe);
-    } else {
-      res.status(404).json({ message: 'Cafe not found' });
-    }
+    if (cafe) { res.json(cafe); } else { res.status(404).json({ message: 'Cafe not found' }); }
   } catch (error) {
     res.status(500).json({ message: 'Server Error' });
   }
@@ -75,14 +56,12 @@ const updateCafe = async (req, res) => {
     const cafe = await Cafe.findById(req.params.id);
     if (cafe) {
       if (cafe.owner.toString() !== req.user._id.toString()) {
-        res.status(401);
-        throw new Error('User not authorized to update this cafe');
+        res.status(401); throw new Error('User not authorized to update this cafe');
       }
       cafe.name = req.body.name || cafe.name;
       cafe.address = req.body.address || cafe.address;
       cafe.photos = req.body.photos || cafe.photos;
       cafe.rooms = req.body.rooms || cafe.rooms;
-      // Also update the location if it's provided
       cafe.location = req.body.location || cafe.location;
       cafe.openingTime = req.body.openingTime || cafe.openingTime;
       cafe.closingTime = req.body.closingTime || cafe.closingTime;
@@ -90,8 +69,7 @@ const updateCafe = async (req, res) => {
       const updatedCafe = await cafe.save();
       res.json(updatedCafe);
     } else {
-      res.status(404);
-      throw new Error('Cafe not found');
+      res.status(404); throw new Error('Cafe not found');
     }
   } catch (error) {
     res.status(res.statusCode || 500).json({ message: error.message });
@@ -108,21 +86,18 @@ const deleteCafe = async (req, res) => {
     const cafe = await Cafe.findById(req.params.id);
     if (cafe) {
       if (cafe.owner.toString() !== req.user._id.toString()) {
-        res.status(401);
-        throw new Error('User not authorized to delete this cafe');
+        res.status(401); throw new Error('User not authorized to delete this cafe');
       }
       await cafe.deleteOne();
       res.json({ message: 'Cafe removed' });
     } else {
-      res.status(404);
-      throw new Error('Cafe not found');
+      res.status(404); throw new Error('Cafe not found');
     }
   } catch (error) {
     res.status(res.statusCode || 500).json({ message: error.message });
   }
 };
 
-// ADD THIS NEW FUNCTION
 /**
  * @desc    Get cafes within a certain radius
  * @route   GET /api/cafes/near-me?lng=...&lat=...&distance=...
@@ -130,39 +105,45 @@ const deleteCafe = async (req, res) => {
  */
 const getCafesNearMe = async (req, res) => {
   try {
-    // 1. Get longitude, latitude, and distance from the URL query parameters.
     const { lng, lat, distance } = req.query;
-
-    // 2. Check that all required parameters were provided.
     if (!lng || !lat || !distance) {
-      res.status(400);
-      throw new Error('Please provide longitude, latitude, and distance in km');
+      res.status(400); throw new Error('Please provide longitude, latitude, and distance in km');
     }
-
-    // 3. Use MongoDB's special geospatial query to find cafes.
     const cafes = await Cafe.find({
       location: {
-        // $nearSphere finds documents within a certain distance on a sphere (the Earth).
         $nearSphere: {
-          // $geometry specifies the user's location as a GeoJSON Point.
-          $geometry: {
-            type: 'Point',
-            coordinates: [parseFloat(lng), parseFloat(lat)], // [longitude, latitude]
-          },
-          // $maxDistance specifies the search radius in meters.
-          $maxDistance: parseInt(distance) * 1000, // We convert the distance from km to meters.
+          $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+          $maxDistance: parseInt(distance) * 1000,
         },
       },
-      isActive: true, // Only find active cafes.
+      isActive: true,
     });
-
-    // 4. Send the results back.
-    res.json({
-      count: cafes.length,
-      data: cafes,
-    });
+    res.json({ count: cafes.length, data: cafes });
   } catch (error) {
     res.status(res.statusCode || 500).json({ message: error.message });
+  }
+};
+
+/**
+ * @desc    Get the cafe for the logged-in owner
+ * @route   GET /api/cafes/my-cafe
+ * @access  Private/Owner
+ */
+const getMyCafe = async (req, res) => {
+  try {
+    // 1. Find the cafe where the 'owner' field matches the logged-in user's ID.
+    const cafe = await Cafe.findOne({ owner: req.user._id });
+
+    // 2. If a cafe is found, send it back.
+    if (cafe) {
+      res.json(cafe);
+    } else {
+      // 3. If no cafe is found for this owner, send back null.
+      // This is not an error; it just means they haven't created a cafe yet.
+      res.json(null);
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Server Error' });
   }
 };
 
@@ -174,5 +155,6 @@ module.exports = {
   getCafeById,
   updateCafe,
   deleteCafe,
-  getCafesNearMe, // Add the new function here
+  getCafesNearMe,
+  getMyCafe,
 };
