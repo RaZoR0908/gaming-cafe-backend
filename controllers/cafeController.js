@@ -7,10 +7,21 @@ const Cafe = require('../models/cafeModel');
  */
 const createCafe = async (req, res) => {
   try {
+    // This is the original, flexible version of the function.
+    // It takes all details, including rooms, from the request body.
     const { name, address, photos, rooms, openingTime, closingTime, location } = req.body;
+    
     const cafe = new Cafe({
-      owner: req.user._id, name, address, photos, rooms, openingTime, closingTime, location,
+      owner: req.user._id,
+      name,
+      address,
+      photos,
+      rooms,
+      openingTime,
+      closingTime,
+      location,
     });
+
     const createdCafe = await cafe.save();
     res.status(201).json(createdCafe);
   } catch (error) {
@@ -18,11 +29,7 @@ const createCafe = async (req, res) => {
   }
 };
 
-/**
- * @desc    Fetch all cafes
- * @route   GET /api/cafes
- * @access  Public
- */
+// ... (The rest of your controller functions are unchanged)
 const getCafes = async (req, res) => {
   try {
     const cafes = await Cafe.find({ isActive: true });
@@ -32,11 +39,6 @@ const getCafes = async (req, res) => {
   }
 };
 
-/**
- * @desc    Fetch a single cafe by its ID
- * @route   GET /api/cafes/:id
- * @access  Public
- */
 const getCafeById = async (req, res) => {
   try {
     const cafe = await Cafe.findById(req.params.id);
@@ -46,11 +48,6 @@ const getCafeById = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update a cafe
- * @route   PUT /api/cafes/:id
- * @access  Private/Owner
- */
 const updateCafe = async (req, res) => {
   try {
     const cafe = await Cafe.findById(req.params.id);
@@ -76,11 +73,6 @@ const updateCafe = async (req, res) => {
   }
 };
 
-/**
- * @desc    Delete a cafe
- * @route   DELETE /api/cafes/:id
- * @access  Private/Owner
- */
 const deleteCafe = async (req, res) => {
   try {
     const cafe = await Cafe.findById(req.params.id);
@@ -98,11 +90,6 @@ const deleteCafe = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get cafes within a certain radius
- * @route   GET /api/cafes/near-me?lng=...&lat=...&distance=...
- * @access  Public
- */
 const getCafesNearMe = async (req, res) => {
   try {
     const { lng, lat, distance } = req.query;
@@ -124,22 +111,12 @@ const getCafesNearMe = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get the cafe for the logged-in owner
- * @route   GET /api/cafes/my-cafe
- * @access  Private/Owner
- */
 const getMyCafe = async (req, res) => {
   try {
-    // 1. Find the cafe where the 'owner' field matches the logged-in user's ID.
     const cafe = await Cafe.findOne({ owner: req.user._id });
-
-    // 2. If a cafe is found, send it back.
     if (cafe) {
       res.json(cafe);
     } else {
-      // 3. If no cafe is found for this owner, send back null.
-      // This is not an error; it just means they haven't created a cafe yet.
       res.json(null);
     }
   } catch (error) {
@@ -147,8 +124,6 @@ const getMyCafe = async (req, res) => {
   }
 };
 
-
-// UPDATE THE EXPORTS AT THE BOTTOM
 module.exports = {
   createCafe,
   getCafes,

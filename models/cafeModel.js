@@ -46,6 +46,11 @@ const cafeSchema = mongoose.Schema(
             specs: {
               type: String, // e.g., 'RTX 4080, 240Hz Monitor'
             },
+            // ADD THIS NEW FIELD
+            pricePerHour: {
+              type: Number,
+              required: true,
+            },
           },
         ],
       },

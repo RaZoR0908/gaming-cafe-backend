@@ -20,6 +20,12 @@ const bookingSchema = new mongoose.Schema(
       required: true,
       ref: 'User',
     },
+    // ADD THIS NEW FIELD
+    // The specific room the customer booked (e.g., 'AC Section').
+    roomType: {
+      type: String,
+      required: true,
+    },
     // The specific type of system the customer booked (e.g., 'PC', 'PS5').
     systemType: {
       type: String,

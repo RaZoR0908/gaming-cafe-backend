@@ -1,26 +1,54 @@
 const Booking = require('../models/bookingModel');
 const Cafe = require('../models/cafeModel');
 
-// ... (existing createBooking, getMyBookings, and getOwnerBookings functions are here)
+/**
+ * @desc    Create a new booking
+ * @route   POST /api/bookings
+ * @access  Private/Customer
+ */
 const createBooking = async (req, res) => {
   try {
-    const { cafeId, systemType, bookingDate, startTime, duration, totalPrice } =
-      req.body;
+    // 1. We now also need the 'roomType' from the user and no longer take 'totalPrice'.
+    const { cafeId, roomType, systemType, bookingDate, startTime, duration } = req.body;
+
     const cafe = await Cafe.findById(cafeId);
     if (!cafe) {
       res.status(404);
       throw new Error('Cafe not found');
     }
+
+    // 2. Find the specific room the user wants to book.
+    const room = cafe.rooms.find(r => r.roomType === roomType);
+    if (!room) {
+      res.status(400);
+      throw new Error(`Room type '${roomType}' not found at this cafe.`);
+    }
+
+    // 3. Find the system within that specific room.
+    const system = room.systems.find(s => s.systemType === systemType);
+    if (!system) {
+      res.status(400);
+      throw new Error(`System type '${systemType}' not found in the '${roomType}'.`);
+    }
+
+    // 4. Get the price from that specific system.
+    const pricePerHour = system.pricePerHour;
+
+    // 5. Automatically calculate the total price on the backend.
+    const totalPrice = duration * pricePerHour;
+
     const booking = new Booking({
       customer: req.user._id,
       cafe: cafeId,
       owner: cafe.owner,
+      roomType, // Save the room type with the booking
       systemType,
       bookingDate,
       startTime,
       duration,
-      totalPrice,
+      totalPrice, // Use the securely calculated price
     });
+
     const createdBooking = await booking.save();
     res.status(201).json(createdBooking);
   } catch (error) {
@@ -56,35 +84,67 @@ const getOwnerBookings = async (req, res) => {
   }
 };
 
-// ADD THIS NEW FUNCTION
-/**
- * @desc    Update a booking's status (e.g., to 'Cancelled' or 'Completed')
- * @route   PUT /api/bookings/:id
- * @access  Private/Owner
- */
 const updateBookingStatus = async (req, res) => {
   try {
-    // 1. Get the new status from the request body.
     const { status } = req.body;
-
-    // 2. Find the booking to be updated by its ID from the URL parameter.
     const booking = await Booking.findById(req.params.id);
-
-    // 3. If the booking is found...
     if (booking) {
-      // 4. IMPORTANT SECURITY CHECK: Make sure the logged-in user is the owner of this booking.
       if (booking.owner.toString() !== req.user._id.toString()) {
-        res.status(401); // Unauthorized
+        res.status(401);
         throw new Error('User not authorized to update this booking');
       }
-
-      // 5. Update the booking's status field.
       booking.status = status;
-
-      // 6. Save the updated booking to the database.
       const updatedBooking = await booking.save();
+      res.json(updatedBooking);
+    } else {
+      res.status(404);
+      throw new Error('Booking not found');
+    }
+  } catch (error) {
+    res.status(res.statusCode || 500).json({ message: error.message });
+  }
+};
 
-      // 7. Send the updated booking back as the response.
+/**
+ * @desc    Extend a booking's duration
+ * @route   PUT /api/bookings/:id/extend
+ * @access  Private/Owner
+ */
+const extendBooking = async (req, res) => {
+  try {
+    // The owner only needs to send how many hours to add.
+    const { hoursToAdd } = req.body;
+    const booking = await Booking.findById(req.params.id);
+
+    if (booking) {
+      if (booking.owner.toString() !== req.user._id.toString()) {
+        res.status(401);
+        throw new Error('User not authorized');
+      }
+
+      const cafe = await Cafe.findById(booking.cafe);
+      if (!cafe) {
+        res.status(404);
+        throw new Error('Cafe not found');
+      }
+
+      // Find the correct room and system from the original booking to get the price.
+      const room = cafe.rooms.find(r => r.roomType === booking.roomType);
+      const system = room ? room.systems.find(s => s.systemType === booking.systemType) : null;
+
+      if (!system) {
+        res.status(400);
+        throw new Error(`System type from original booking not found.`);
+      }
+
+      // Automatically calculate the additional price.
+      const pricePerHour = system.pricePerHour;
+      const priceToAdd = hoursToAdd * pricePerHour;
+
+      booking.duration += parseFloat(hoursToAdd);
+      booking.totalPrice += priceToAdd;
+
+      const updatedBooking = await booking.save();
       res.json(updatedBooking);
     } else {
       res.status(404);
@@ -96,10 +156,10 @@ const updateBookingStatus = async (req, res) => {
 };
 
 
-// UPDATE THE EXPORTS AT THE BOTTOM
 module.exports = {
   createBooking,
   getMyBookings,
   getOwnerBookings,
-  updateBookingStatus, // Add the new function here
+  updateBookingStatus,
+  extendBooking,
 };
