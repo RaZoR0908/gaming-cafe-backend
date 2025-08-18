@@ -1,6 +1,21 @@
 const Booking = require('../models/bookingModel');
 const Cafe = require('../models/cafeModel');
 
+// Helper function to convert "02:00 PM" or "2:00 PM" to a 24-hour number like 14
+const timeToHour = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return 0;
+  const [time, modifier] = timeStr.split(' ');
+  let [hours] = time.split(':');
+  
+  if (hours === '12') {
+    hours = '00';
+  }
+  if (modifier && modifier.toUpperCase() === 'PM') {
+    hours = parseInt(hours, 10) + 12;
+  }
+  return parseInt(hours, 10);
+};
+
 /**
  * @desc    Create a new booking (for customers)
  * @route   POST /api/bookings
@@ -28,7 +43,7 @@ const createBooking = async (req, res) => {
       throw new Error(`System type '${systemType}' not found in the '${roomType}'.`);
     }
 
-    // --- REAL-TIME AVAILABILITY CHECK ---
+    // --- NEW: Smarter Availability Check ---
     const startOfDay = new Date(bookingDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(bookingDate);
@@ -39,16 +54,28 @@ const createBooking = async (req, res) => {
       roomType,
       systemType,
       bookingDate: { $gte: startOfDay, $lte: endOfDay },
-      startTime: startTime,
       status: 'Confirmed',
     });
 
-    const bookedCount = existingBookings.reduce((acc, b) => acc + b.numberOfSystems, 0);
-    const availableCount = system.count - bookedCount;
-
-    if (numberOfSystems > availableCount) {
-      res.status(400);
-      throw new Error(`Sorry, only ${availableCount} ${systemType}(s) are available at that time.`);
+    const bookingStartHour = timeToHour(startTime);
+    const bookingEndHour = bookingStartHour + duration;
+    
+    // Check every hour within the new booking's duration
+    for (let hour = bookingStartHour; hour < bookingEndHour; hour++) {
+      let bookedCountAtTime = 0;
+      existingBookings.forEach(booking => {
+          const existingStart = timeToHour(booking.startTime);
+          const existingEnd = existingStart + booking.duration;
+          // Check for any overlap
+          if (hour >= existingStart && hour < existingEnd) {
+              bookedCountAtTime += booking.numberOfSystems;
+          }
+      });
+      const availableCount = system.count - bookedCountAtTime;
+      if (numberOfSystems > availableCount) {
+        res.status(400);
+        throw new Error(`Sorry, only ${availableCount} ${systemType}(s) are available at ${hour}:00.`);
+      }
     }
 
     const pricePerHour = system.pricePerHour;
@@ -74,11 +101,6 @@ const createBooking = async (req, res) => {
   }
 };
 
-/**
- * @desc    Create a walk-in booking (for owners)
- * @route   POST /api/bookings/walk-in
- * @access  Private/Owner
- */
 const createWalkInBooking = async (req, res) => {
   try {
     const { cafeId, roomType, systemType, bookingDate, startTime, duration, numberOfSystems } = req.body;
@@ -89,18 +111,22 @@ const createWalkInBooking = async (req, res) => {
       throw new Error('Cafe not found');
     }
 
-    // Security Check: Make sure the logged-in user owns this cafe
     if (cafe.owner.toString() !== req.user._id.toString()) {
       res.status(401);
       throw new Error('User not authorized to create a booking for this cafe');
     }
 
     const room = cafe.rooms.find(r => r.roomType === roomType);
-    if (!room) { /* ... error handling ... */ }
+    if (!room) {
+      res.status(400);
+      throw new Error(`Room type '${roomType}' not found at this cafe.`);
+    }
     const system = room.systems.find(s => s.systemType === systemType);
-    if (!system) { /* ... error handling ... */ }
+    if (!system) {
+      res.status(400);
+      throw new Error(`System type '${systemType}' not found in the '${roomType}'.`);
+    }
 
-    // Perform the same availability check
     const startOfDay = new Date(bookingDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(bookingDate);
@@ -121,7 +147,6 @@ const createWalkInBooking = async (req, res) => {
     const totalPrice = duration * pricePerHour * numberOfSystems;
 
     const booking = new Booking({
-      // Note: The 'customer' field is left empty for a walk-in
       cafe: cafeId,
       owner: cafe.owner,
       roomType,
@@ -140,7 +165,11 @@ const createWalkInBooking = async (req, res) => {
   }
 };
 
-
+/**
+ * @desc    Get real-time slot availability for a cafe on a specific date
+ * @route   GET /api/bookings/availability/:cafeId?date=YYYY-MM-DD
+ * @access  Public
+ */
 const getSlotAvailability = async (req, res) => {
   try {
     const { cafeId } = req.params;
@@ -167,7 +196,7 @@ const getSlotAvailability = async (req, res) => {
       res.status(404);
       throw new Error('Cafe not found');
     }
-
+    
     const timeSlots = [];
     const opening = parseInt(cafe.openingTime.split(':')[0]);
     const closing = parseInt(cafe.closingTime.split(':')[0]);
@@ -186,12 +215,21 @@ const getSlotAvailability = async (req, res) => {
       room.systems.forEach(system => {
         availability[room.roomType][system.systemType] = {};
         timeSlots.forEach(slot => {
-          const bookingsForSlot = bookings.filter(b => 
-            b.roomType === room.roomType && 
-            b.systemType === system.systemType && 
-            b.startTime === slot
-          );
-          const bookedCount = bookingsForSlot.reduce((acc, b) => acc + b.numberOfSystems, 0);
+          const slotHour = timeToHour(slot);
+          let bookedCount = 0;
+
+          bookings.forEach(booking => {
+            if (booking.roomType === room.roomType && booking.systemType === system.systemType) {
+              const bookingStartHour = timeToHour(booking.startTime);
+              const bookingDuration = typeof booking.duration === 'number' ? booking.duration : 0;
+              const bookingEndHour = bookingStartHour + bookingDuration;
+
+              if (slotHour >= bookingStartHour && slotHour < bookingEndHour) {
+                bookedCount += booking.numberOfSystems;
+              }
+            }
+          });
+          
           const availableCount = system.count - bookedCount;
           availability[room.roomType][system.systemType][slot] = availableCount;
         });
@@ -226,8 +264,28 @@ const getOwnerBookings = async (req, res) => {
       res.status(401);
       throw new Error('User not authorized to view these bookings');
     }
-    const bookings = await Booking.find({ cafe: cafeId });
-    res.json(bookings);
+
+    const now = new Date();
+    const pastBookings = await Booking.find({
+      cafe: cafeId,
+      status: 'Confirmed',
+    });
+
+    for (const booking of pastBookings) {
+      const bookingStartHour = timeToHour(booking.startTime);
+      const bookingDateTime = new Date(booking.bookingDate);
+      bookingDateTime.setHours(bookingStartHour, 0, 0, 0);
+
+      const bookingEndDateTime = new Date(bookingDateTime.getTime() + booking.duration * 60 * 60 * 1000);
+
+      if (bookingEndDateTime < now) {
+        booking.status = 'Completed';
+        await booking.save();
+      }
+    }
+
+    const allBookingsForCafe = await Booking.find({ cafe: cafeId });
+    res.json(allBookingsForCafe);
   } catch (error) {
     res.status(res.statusCode || 500).json({ message: error.message });
   }
