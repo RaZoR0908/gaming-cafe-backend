@@ -7,7 +7,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const cafeRoutes = require('./routes/cafeRoutes');
 const bookingRoutes = require('./routes/bookingRoutes'); // <-- Add this line
-
+const reviewRoutes = require('./routes/reviewRoutes');
 dotenv.config();
 connectDB();
 
@@ -26,6 +26,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/cafes', cafeRoutes);
 app.use('/api/bookings', bookingRoutes); // <-- Add this line
+app.use('/api/reviews', reviewRoutes); 
 
 
 app.listen(PORT, () => {
