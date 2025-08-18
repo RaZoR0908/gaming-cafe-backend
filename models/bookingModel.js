@@ -3,9 +3,9 @@ const mongoose = require('mongoose');
 const bookingSchema = new mongoose.Schema(
   {
     // The customer who made the booking.
+    // This is no longer required, to allow for walk-ins.
     customer: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
       ref: 'User',
     },
     // The cafe that was booked.
@@ -20,7 +20,6 @@ const bookingSchema = new mongoose.Schema(
       required: true,
       ref: 'User',
     },
-    // ADD THIS NEW FIELD
     // The specific room the customer booked (e.g., 'AC Section').
     roomType: {
       type: String,
@@ -30,6 +29,12 @@ const bookingSchema = new mongoose.Schema(
     systemType: {
       type: String,
       required: true,
+    },
+    // This will store how many systems the user booked (e.g., 3 PCs)
+    numberOfSystems: {
+      type: Number,
+      required: true,
+      default: 1,
     },
     // The date of the booking.
     bookingDate: {
