@@ -103,7 +103,7 @@ const createBooking = async (req, res) => {
 
 const createWalkInBooking = async (req, res) => {
   try {
-    const { cafeId, roomType, systemType, bookingDate, startTime, duration, numberOfSystems } = req.body;
+    const { cafeId, roomType, systemType, bookingDate, startTime, duration, numberOfSystems,walkInCustomerName } = req.body;
 
     const cafe = await Cafe.findById(cafeId);
     if (!cafe) {
@@ -149,6 +149,7 @@ const createWalkInBooking = async (req, res) => {
     const booking = new Booking({
       cafe: cafeId,
       owner: cafe.owner,
+      walkInCustomerName,
       roomType,
       systemType,
       numberOfSystems,
@@ -284,12 +285,19 @@ const getOwnerBookings = async (req, res) => {
       }
     }
 
-    const allBookingsForCafe = await Booking.find({ cafe: cafeId });
+    // --- UPDATED LOGIC: Fetch bookings and populate customer details ---
+    const allBookingsForCafe = await Booking.find({ cafe: cafeId })
+      // This tells the database to find the user linked to the 'customer' ID
+      // and include their 'name' in the response.
+      .populate('customer', 'name')
+      .sort({ bookingDate: -1, startTime: 1 }); // Sort by most recent
+
     res.json(allBookingsForCafe);
   } catch (error) {
     res.status(res.statusCode || 500).json({ message: error.message });
   }
 };
+
 
 const updateBookingStatus = async (req, res) => {
   try {

@@ -8,6 +8,12 @@ const bookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+
+     // ADD THIS NEW FIELD
+    // The name of the walk-in customer, if applicable.
+    walkInCustomerName: {
+      type: String,
+    },
     // The cafe that was booked.
     cafe: {
       type: mongoose.Schema.Types.ObjectId,
