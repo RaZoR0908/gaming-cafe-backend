@@ -206,7 +206,7 @@ const createWalkInBooking = async (req, res) => {
     const booking = new Booking({
       cafe: cafeId,
       owner: cafe.owner,
-      walkInCustomerName: bookingType === 'group' ? walkInCustomerName : undefined,
+      walkInCustomerName: walkInCustomerName, // Always save the customer name
       systemsBooked: validatedSystems,
       bookingDate,
       startTime,
@@ -675,6 +675,61 @@ const autoCompleteExpiredSessions = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Update system maintenance status
+ * @route   PATCH /api/bookings/system-maintenance
+ * @access  Private/Owner
+ */
+const updateSystemMaintenanceStatus = async (req, res) => {
+  try {
+    const { cafeId, roomName, systemId, status } = req.body;
+
+    if (!['Available', 'Under Maintenance'].includes(status)) {
+      res.status(400);
+      throw new Error('Status must be Available or Under Maintenance');
+    }
+
+    const cafe = await Cafe.findById(cafeId);
+    if (!cafe) {
+      res.status(404);
+      throw new Error('Cafe not found');
+    }
+
+    if (cafe.owner.toString() !== req.user._id.toString()) {
+      res.status(401);
+      throw new Error('User not authorized to manage this cafe');
+    }
+
+    const room = cafe.rooms.find(r => r.name === roomName);
+    if (!room) {
+      res.status(404);
+      throw new Error('Room not found');
+    }
+
+    const system = room.systems.find(s => s.systemId === systemId);
+    if (!system) {
+      res.status(404);
+      throw new Error('System not found');
+    }
+
+    if (system.status === 'Active') {
+      res.status(400);
+      throw new Error('Cannot change maintenance status while system is active');
+    }
+
+    system.status = status;
+    await cafe.save();
+
+    res.status(200).json({
+      success: true,
+      message: `System ${systemId} status updated to ${status}`,
+      data: cafe
+    });
+  } catch (error) {
+    res.status(res.statusCode || 500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createBooking,
   createWalkInBooking,
@@ -687,4 +742,5 @@ module.exports = {
   endSession,
   getAvailableSystemsForAssignment,
   autoCompleteExpiredSessions,
+  updateSystemMaintenanceStatus,
 };

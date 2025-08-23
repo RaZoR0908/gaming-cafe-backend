@@ -13,6 +13,7 @@ const {
   endSession,
   getAvailableSystemsForAssignment,
   autoCompleteExpiredSessions,
+  updateSystemMaintenanceStatus,
 } = require('../controllers/bookingController');
 const { protect, isOwner } = require('../middleware/authMiddleware');
 
@@ -41,6 +42,8 @@ router.route('/end-session').post(protect, isOwner, endSession);
 router.route('/available-systems/:cafeId').get(protect, isOwner, getAvailableSystemsForAssignment);
 // Auto-complete expired sessions
 router.route('/auto-complete-sessions').post(protect, isOwner, autoCompleteExpiredSessions);
+// Update system maintenance status
+router.route('/system-maintenance').patch(protect, isOwner, updateSystemMaintenanceStatus);
 
 // --- PUBLIC ROUTE ---
 // Get real-time slot availability for a cafe
