@@ -9,7 +9,6 @@ const bookingSchema = new mongoose.Schema(
       ref: 'User',
     },
 
-     // ADD THIS NEW FIELD
     // The name of the walk-in customer, if applicable.
     walkInCustomerName: {
       type: String,
@@ -26,22 +25,40 @@ const bookingSchema = new mongoose.Schema(
       required: true,
       ref: 'User',
     },
-    // The specific room the customer booked (e.g., 'AC Section').
+    
+    // NEW: Support for multiple room/system combinations
+    systemsBooked: [{
+      roomType: {
+        type: String,
+        required: true,
+      },
+      systemType: {
+        type: String,
+        required: true,
+      },
+      numberOfSystems: {
+        type: Number,
+        required: true,
+        default: 1,
+      },
+      pricePerHour: {
+        type: Number,
+        required: true,
+      }
+    }],
+    
+    // DEPRECATED: Keep for backward compatibility, but use systemsBooked for new bookings
     roomType: {
       type: String,
-      required: true,
     },
-    // The specific type of system the customer booked (e.g., 'PC', 'PS5').
     systemType: {
       type: String,
-      required: true,
     },
-    // This will store how many systems the user booked (e.g., 3 PCs)
     numberOfSystems: {
       type: Number,
-      required: true,
       default: 1,
     },
+    
     // The date of the booking.
     bookingDate: {
       type: Date,
@@ -52,22 +69,47 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    // The duration of the booking in hours.
+    // The duration of the booking in hours (must be in 0.5 hour intervals).
     duration: {
       type: Number,
       required: true,
+      validate: {
+        validator: function(v) {
+          return v % 0.5 === 0; // Must be in 30-minute intervals
+        },
+        message: 'Duration must be in 30-minute intervals'
+      }
     },
     // The total price for the booking.
     totalPrice: {
       type: Number,
       required: true,
     },
-    // The status of the booking.
+    // The status of the booking: Booked → Active → Completed
     status: {
       type: String,
       required: true,
-      enum: ['Confirmed', 'Cancelled', 'Completed'],
-      default: 'Confirmed',
+      enum: ['Booked', 'Active', 'Completed', 'Cancelled'],
+      default: 'Booked',
+    },
+    // NEW: Track assigned systems for active sessions
+    assignedSystems: [{
+      systemId: {
+        type: String,
+        required: true,
+      },
+      roomType: {
+        type: String,
+        required: true,
+      }
+    }],
+    // NEW: Track when session actually started (for timer calculations)
+    sessionStartTime: {
+      type: Date,
+    },
+    // NEW: Track when session ends (for auto-completion)
+    sessionEndTime: {
+      type: Date,
     },
   },
   {

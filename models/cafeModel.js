@@ -16,8 +16,14 @@ const systemSchema = new mongoose.Schema({
   // The current status of the system, crucial for booking logic.
   status: {
     type: String,
-    enum: ['Available', 'Booked', 'Under Maintenance'],
+    enum: ['Available', 'Active', 'Under Maintenance'],
     default: 'Available',
+  },
+  // NEW: Track active booking for this system
+  activeBooking: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Booking',
+    default: null,
   },
   // A nested object to hold specifications, primarily for PCs.
   specs: { 

@@ -9,6 +9,10 @@ const {
   extendBooking,
   getSlotAvailability,
   createWalkInBooking,
+  assignSystemsAndStartSession,
+  endSession,
+  getAvailableSystemsForAssignment,
+  autoCompleteExpiredSessions,
 } = require('../controllers/bookingController');
 const { protect, isOwner } = require('../middleware/authMiddleware');
 
@@ -27,6 +31,16 @@ router.route('/walk-in').post(protect, isOwner, createWalkInBooking);
 router.route('/:id').put(protect, isOwner, updateBookingStatus);
 // Extend a specific booking's duration
 router.route('/:id/extend').patch(protect, isOwner, extendBooking);
+
+// --- NEW SYSTEM MANAGEMENT ROUTES ---
+// Assign systems to a booking and start session
+router.route('/assign-systems').post(protect, isOwner, assignSystemsAndStartSession);
+// End an active session
+router.route('/end-session').post(protect, isOwner, endSession);
+// Get available systems for assignment
+router.route('/available-systems/:cafeId').get(protect, isOwner, getAvailableSystemsForAssignment);
+// Auto-complete expired sessions
+router.route('/auto-complete-sessions').post(protect, isOwner, autoCompleteExpiredSessions);
 
 // --- PUBLIC ROUTE ---
 // Get real-time slot availability for a cafe
