@@ -31,13 +31,13 @@ const createBooking = async (req, res) => {
       throw new Error('Cafe not found');
     }
 
-    const room = cafe.rooms.find(r => r.roomType === roomType);
+    const room = cafe.rooms.find(r => r.name === roomType);
     if (!room) {
       res.status(400);
       throw new Error(`Room type '${roomType}' not found at this cafe.`);
     }
 
-    const system = room.systems.find(s => s.systemType === systemType);
+    const system = room.systems.find(s => s.type === systemType);
     if (!system) {
       res.status(400);
       throw new Error(`System type '${systemType}' not found in the '${roomType}'.`);
@@ -49,12 +49,16 @@ const createBooking = async (req, res) => {
     const endOfDay = new Date(bookingDate);
     endOfDay.setHours(23, 59, 59, 999);
 
+    // Get all systems of the selected type in the room
+    const systemsOfType = room.systems.filter(s => s.type === systemType);
+    const totalSystemCount = systemsOfType.length;
+
     const existingBookings = await Booking.find({
       cafe: cafeId,
       roomType,
       systemType,
       bookingDate: { $gte: startOfDay, $lte: endOfDay },
-      status: 'Confirmed',
+      status: 'Booked',
     });
 
     const bookingStartHour = timeToHour(startTime);
@@ -71,7 +75,7 @@ const createBooking = async (req, res) => {
               bookedCountAtTime += booking.numberOfSystems;
           }
       });
-      const availableCount = system.count - bookedCountAtTime;
+      const availableCount = totalSystemCount - bookedCountAtTime;
       if (numberOfSystems > availableCount) {
         res.status(400);
         throw new Error(`Sorry, only ${availableCount} ${systemType}(s) are available at ${hour}:00.`);
@@ -150,7 +154,7 @@ const createWalkInBooking = async (req, res) => {
       const existingBookings = await Booking.find({
         cafe: cafeId,
         bookingDate: { $gte: startOfDay, $lte: endOfDay },
-        status: { $in: ['Booked', 'Active'] },
+        status: 'Booked',
         $or: [
           // Old format bookings
           { roomType, systemType },
@@ -242,10 +246,11 @@ const getSlotAvailability = async (req, res) => {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
+    // Get both Booked and Active bookings for the date
     const bookings = await Booking.find({
       cafe: cafeId,
       bookingDate: { $gte: startOfDay, $lte: endOfDay },
-      status: 'Confirmed',
+      status: { $in: ['Booked', 'Active'] }, // Check both Booked and Active status
     });
 
     const cafe = await Cafe.findById(cafeId);
@@ -268,15 +273,15 @@ const getSlotAvailability = async (req, res) => {
     const availability = {};
 
     cafe.rooms.forEach(room => {
-      availability[room.roomType] = {};
+      availability[room.name] = {};
       room.systems.forEach(system => {
-        availability[room.roomType][system.systemType] = {};
+        availability[room.name][system.type] = {};
         timeSlots.forEach(slot => {
           const slotHour = timeToHour(slot);
           let bookedCount = 0;
 
           bookings.forEach(booking => {
-            if (booking.roomType === room.roomType && booking.systemType === system.systemType) {
+            if (booking.roomType === room.name && booking.systemType === system.type) {
               const bookingStartHour = timeToHour(booking.startTime);
               const bookingDuration = typeof booking.duration === 'number' ? booking.duration : 0;
               const bookingEndHour = bookingStartHour + bookingDuration;
@@ -287,8 +292,21 @@ const getSlotAvailability = async (req, res) => {
             }
           });
           
-          const availableCount = system.count - bookedCount;
-          availability[room.roomType][system.systemType][slot] = availableCount;
+          // Check if this specific system is currently in use (Active status)
+          let systemAvailable = 1; // Default: 1 system available
+          
+          if (system.status === 'Active') {
+            // This system is currently in use, so it's not available
+            systemAvailable = 0;
+          } else if (system.status === 'Under Maintenance') {
+            // This system is under maintenance, so it's not available
+            systemAvailable = 0;
+          }
+          
+          // For the time slot, consider both future bookings and current system status
+          const availableCount = Math.max(0, systemAvailable - bookedCount);
+          
+          availability[room.name][system.type][slot] = availableCount;
         });
       });
     });
@@ -325,7 +343,7 @@ const getOwnerBookings = async (req, res) => {
     const now = new Date();
     const pastBookings = await Booking.find({
       cafe: cafeId,
-      status: 'Confirmed',
+      status: 'Active', // Only auto-complete Active sessions, not new Booked bookings
     });
 
     for (const booking of pastBookings) {
@@ -393,8 +411,8 @@ const extendBooking = async (req, res) => {
         throw new Error('Cafe not found');
       }
 
-      const room = cafe.rooms.find(r => r.roomType === booking.roomType);
-      const system = room ? room.systems.find(s => s.systemType === booking.systemType) : null;
+      const room = cafe.rooms.find(r => r.name === booking.roomType);
+      const system = room ? room.systems.find(s => s.type === booking.systemType) : null;
 
       if (!system) {
         res.status(400);
