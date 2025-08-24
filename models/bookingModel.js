@@ -111,6 +111,11 @@ const bookingSchema = new mongoose.Schema(
     sessionEndTime: {
       type: Date,
     },
+    // NEW: Track if booking is permanently cancelled (after 10 minutes)
+    permanentlyCancelled: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt
