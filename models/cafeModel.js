@@ -92,6 +92,17 @@ const cafeSchema = new mongoose.Schema({
     type: String, // e.g., "23:00"
     required: true,
   },
+  // Contact number for the cafe
+  contactNumber: {
+    type: String,
+    trim: true,
+  },
+  // Description of the cafe
+  description: {
+    type: String,
+    trim: true,
+    maxlength: 500, // Limit description to 500 characters
+  },
 }, {
   // Automatically adds 'createdAt' and 'updatedAt' fields.
   timestamps: true,

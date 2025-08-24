@@ -12,7 +12,11 @@ dotenv.config();
 connectDB();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*', // Allow all origins for development
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.use(express.json());
 
@@ -93,7 +97,14 @@ const autoCompleteExpiredSessions = async () => {
 setInterval(autoCompleteExpiredSessions, 60000); // Run every minute (60000ms)
 
 app.get('/', (req, res) => {
+  console.log(`📡 Health check request from: ${req.ip}`);
   res.send('Backend API is running...');
+});
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  console.log(`📡 ${req.method} ${req.path} from ${req.ip}`);
+  next();
 });
 
 // 2. Tell the app to use the routes
@@ -103,7 +114,8 @@ app.use('/api/bookings', bookingRoutes); // <-- Add this line
 app.use('/api/reviews', reviewRoutes); 
 
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Server accessible at: http://0.0.0.0:${PORT}`);
   console.log('Auto-complete job started - checking for expired sessions every minute');
 });

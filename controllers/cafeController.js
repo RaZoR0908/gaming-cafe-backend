@@ -72,9 +72,20 @@ const updateCafe = async (req, res) => {
 
 const getCafes = async (req, res) => {
   try {
-    const cafes = await Cafe.find({ isActive: true });
+    // For mobile app, show all cafes (not just active ones)
+    // This ensures mobile users can see all available cafes
+    const cafes = await Cafe.find({});
+    console.log(`📡 GET /api/cafes - Found ${cafes.length} cafes in database`);
+    
+    if (cafes.length > 0) {
+      cafes.forEach((cafe, index) => {
+        console.log(`   ${index + 1}. ${cafe.name} - Active: ${cafe.isActive}`);
+      });
+    }
+    
     res.json(cafes);
   } catch (error) {
+    console.error('❌ Error in getCafes:', error.message);
     res.status(500).json({ message: 'Server Error' });
   }
 };
