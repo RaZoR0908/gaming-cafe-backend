@@ -23,7 +23,7 @@ const timeToHour = (timeStr) => {
  */
 const createBooking = async (req, res) => {
   try {
-    const { cafeId, roomType, systemType, bookingDate, startTime, duration, numberOfSystems } = req.body;
+    const { cafeId, roomType, systemType, bookingDate, startTime, duration, numberOfSystems, phoneNumber } = req.body;
 
     const cafe = await Cafe.findById(cafeId);
     if (!cafe) {
@@ -96,6 +96,7 @@ const createBooking = async (req, res) => {
       startTime,
       duration,
       totalPrice,
+      phoneNumber,
     });
 
     const createdBooking = await booking.save();
@@ -107,7 +108,7 @@ const createBooking = async (req, res) => {
 
 const createWalkInBooking = async (req, res) => {
   try {
-    const { cafeId, bookingType, walkInCustomerName, systemsBooked, bookingDate, startTime, duration } = req.body;
+    const { cafeId, bookingType, walkInCustomerName, phoneNumber, systemsBooked, bookingDate, startTime, duration } = req.body;
 
     // Validate duration is in 30-minute intervals
     if (duration % 0.5 !== 0) {
@@ -211,6 +212,7 @@ const createWalkInBooking = async (req, res) => {
       cafe: cafeId,
       owner: cafe.owner,
       walkInCustomerName: walkInCustomerName, // Always save the customer name
+      phoneNumber, // Save the phone number
       systemsBooked: validatedSystems,
       bookingDate,
       startTime,

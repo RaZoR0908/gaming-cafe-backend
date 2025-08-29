@@ -13,6 +13,13 @@ const bookingSchema = new mongoose.Schema(
     walkInCustomerName: {
       type: String,
     },
+    
+    // Phone number for both regular and walk-in customers
+    phoneNumber: {
+      type: String,
+      required: true,
+    },
+    
     // The cafe that was booked.
     cafe: {
       type: mongoose.Schema.Types.ObjectId,
