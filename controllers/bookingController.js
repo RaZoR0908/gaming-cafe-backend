@@ -651,44 +651,106 @@ const autoCompleteExpiredSessions = async (req, res) => {
   try {
     const now = new Date();
     
-    // Find all active bookings that have passed their end time
-    const expiredBookings = await Booking.find({
-      status: 'Active',
-      sessionEndTime: { $lte: now }
+    // Get all active bookings and filter by actual session duration
+    const activeBookings = await Booking.find({
+      status: 'Active'
+    });
+    
+    // Filter bookings that have actually expired based on sessionStartTime + duration
+    const expiredBookings = activeBookings.filter(booking => {
+      if (!booking.sessionStartTime || !booking.duration) {
+        return false; // Skip bookings without proper timing data
+      }
+      
+      // Calculate when the session should actually end
+      const sessionStart = new Date(booking.sessionStartTime);
+      const sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+      
+      // Check if the session has actually ended
+      return sessionEnd <= now;
     });
 
+    if (expiredBookings.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No expired sessions found',
+        data: { completedBookings: [] }
+      });
+    }
+
     const completedBookings = [];
+    let systemUpdatesCount = 0;
 
     for (const booking of expiredBookings) {
-      const cafe = await Cafe.findById(booking.cafe);
-      if (cafe) {
-        // Free up assigned systems
-        if (booking.assignedSystems && booking.assignedSystems.length > 0) {
-          for (const assignedSystem of booking.assignedSystems) {
-            const room = cafe.rooms.find(r => r.name === assignedSystem.roomType);
-            if (room) {
-              const system = room.systems.find(s => s.systemId === assignedSystem.systemId);
-              if (system) {
-                system.status = 'Available';
-                system.activeBooking = null;
+      // Log the timing details for debugging
+      const sessionStart = new Date(booking.sessionStartTime);
+      const calculatedEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+      console.log(`📅 Manual sync - Session ${booking._id}: Started at ${sessionStart.toLocaleTimeString()}, Duration: ${booking.duration}h, Should end at: ${calculatedEnd.toLocaleTimeString()}, Current time: ${now.toLocaleTimeString()}`);
+      
+      try {
+        const cafe = await Cafe.findById(booking.cafe);
+        if (cafe) {
+          let cafeUpdated = false;
+          
+          // Free up assigned systems
+          if (booking.assignedSystems && booking.assignedSystems.length > 0) {
+            for (const assignedSystem of booking.assignedSystems) {
+              const room = cafe.rooms.find(r => r.name === assignedSystem.roomType);
+              if (room) {
+                const system = room.systems.find(s => s.systemId === assignedSystem.systemId);
+                if (system && system.status === 'Active') {
+                  system.status = 'Available';
+                  system.activeBooking = null;
+                  cafeUpdated = true;
+                  systemUpdatesCount++;
+                }
               }
             }
           }
-          await cafe.save();
-        }
+          
+          // Also check if any system has this booking as activeBooking (fallback)
+          cafe.rooms.forEach(room => {
+            room.systems.forEach(system => {
+              if (system.activeBooking && system.activeBooking.toString() === booking._id.toString() && system.status === 'Active') {
+                system.status = 'Available';
+                system.activeBooking = null;
+                cafeUpdated = true;
+                systemUpdatesCount++;
+              }
+            });
+          });
 
-        // Update booking status
-        booking.status = 'Completed';
-        await booking.save();
-        
-        completedBookings.push(booking._id);
+          // Save cafe changes if any systems were updated
+          if (cafeUpdated) {
+            await cafe.save();
+          }
+
+          // Double-check that the session has actually expired before marking as completed
+          const sessionStart = new Date(booking.sessionStartTime);
+          const sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+          
+          if (sessionEnd <= now) {
+            // Update booking status
+            booking.status = 'Completed';
+            await booking.save();
+            completedBookings.push(booking._id);
+            console.log(`✅ Manual sync - Session ${booking._id} completed successfully`);
+          } else {
+            console.log(`⚠️ Manual sync - Session ${booking._id} not yet expired - skipping completion`);
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing expired session ${booking._id}:`, error.message);
       }
     }
 
     res.status(200).json({
       success: true,
-      message: `${completedBookings.length} sessions auto-completed`,
-      data: { completedBookings }
+      message: `${completedBookings.length} sessions auto-completed, ${systemUpdatesCount} systems freed`,
+      data: { 
+        completedBookings,
+        systemUpdatesCount
+      }
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
