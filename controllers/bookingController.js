@@ -559,6 +559,9 @@ const endSession = async (req, res) => {
       throw new Error('Cafe not found');
     }
 
+    // Track which systems were updated for the response
+    const updatedSystems = [];
+
     // Free up assigned systems
     if (booking.assignedSystems && booking.assignedSystems.length > 0) {
       for (const assignedSystem of booking.assignedSystems) {
@@ -568,6 +571,15 @@ const endSession = async (req, res) => {
           if (system) {
             system.status = 'Available';
             system.activeBooking = null;
+            system.endTime = null; // Clear end time
+            
+            // Add to updated systems list for response
+            updatedSystems.push({
+              systemId: system.systemId,
+              roomType: assignedSystem.roomType,
+              status: system.status,
+              endTime: null
+            });
           }
         }
       }
@@ -581,7 +593,11 @@ const endSession = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Session ended successfully',
-      data: { booking, cafe }
+      data: { 
+        booking, 
+        cafe,
+        updatedSystems // Return the updated systems for immediate frontend update
+      }
     });
   } catch (error) {
     res.status(res.statusCode || 400).json({ message: error.message });
