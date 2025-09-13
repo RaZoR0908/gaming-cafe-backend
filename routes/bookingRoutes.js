@@ -14,6 +14,8 @@ const {
   getAvailableSystemsForAssignment,
   autoCompleteExpiredSessions,
   updateSystemMaintenanceStatus,
+  verifyOTP,
+  verifyOTPAndStartSession,
 } = require('../controllers/bookingController');
 const { protect, isOwner } = require('../middleware/authMiddleware');
 
@@ -36,6 +38,10 @@ router.route('/:id/extend').patch(protect, isOwner, extendBooking);
 // --- NEW SYSTEM MANAGEMENT ROUTES ---
 // Assign systems to a booking and start session
 router.route('/assign-systems').post(protect, isOwner, assignSystemsAndStartSession);
+// Verify OTP only (for mobile bookings)
+router.route('/verify-otp-only').post(protect, isOwner, verifyOTP);
+// Verify OTP and start session (for mobile bookings)
+router.route('/verify-otp').post(protect, isOwner, verifyOTPAndStartSession);
 // End an active session
 router.route('/end-session').post(protect, isOwner, endSession);
 // Get available systems for assignment

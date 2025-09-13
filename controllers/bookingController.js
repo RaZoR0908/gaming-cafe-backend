@@ -1,6 +1,11 @@
 const Booking = require('../models/bookingModel');
 const Cafe = require('../models/cafeModel');
 
+// Helper function to generate 6-digit OTP
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
 // Helper function to convert "02:00 PM" or "2:00 PM" to a 24-hour number like 14
 const timeToHour = (timeStr) => {
   if (!timeStr || typeof timeStr !== 'string') return 0;
@@ -97,6 +102,7 @@ const createBooking = async (req, res) => {
       duration,
       totalPrice,
       phoneNumber,
+      otp: generateOTP(), // Generate OTP for mobile bookings
     });
 
     const createdBooking = await booking.save();
@@ -866,6 +872,186 @@ const updateSystemMaintenanceStatus = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Verify OTP for booking (without starting session)
+ * @route   POST /api/bookings/verify-otp-only
+ * @access  Private/Owner
+ */
+const verifyOTP = async (req, res) => {
+  try {
+    const { bookingId, otp } = req.body;
+
+    if (!bookingId || !otp) {
+      res.status(400);
+      throw new Error('Booking ID and OTP are required');
+    }
+
+    // Validate OTP format
+    if (!/^\d{6}$/.test(otp)) {
+      res.status(400);
+      throw new Error('OTP must be exactly 6 digits');
+    }
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      res.status(404);
+      throw new Error('Booking not found');
+    }
+
+    if (booking.owner.toString() !== req.user._id.toString()) {
+      res.status(401);
+      throw new Error('User not authorized to manage this booking');
+    }
+
+    if (booking.status !== 'Booked') {
+      res.status(400);
+      throw new Error('Only booked sessions can be verified');
+    }
+
+    // Check if booking has OTP (mobile booking)
+    if (!booking.otp) {
+      res.status(400);
+      throw new Error('This booking does not require OTP verification (walk-in booking)');
+    }
+
+    // Verify OTP
+    if (booking.otp !== otp) {
+      res.status(400);
+      throw new Error('Invalid OTP. Please check the OTP provided by the customer.');
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully',
+      data: { booking }
+    });
+  } catch (error) {
+    res.status(res.statusCode || 400).json({ message: error.message });
+  }
+};
+
+/**
+ * @desc    Verify OTP for booking and start session
+ * @route   POST /api/bookings/verify-otp
+ * @access  Private/Owner
+ */
+const verifyOTPAndStartSession = async (req, res) => {
+  try {
+    const { bookingId, otp, systemAssignments } = req.body;
+
+    if (!bookingId || !otp) {
+      res.status(400);
+      throw new Error('Booking ID and OTP are required');
+    }
+
+    // Validate OTP format
+    if (!/^\d{6}$/.test(otp)) {
+      res.status(400);
+      throw new Error('OTP must be exactly 6 digits');
+    }
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      res.status(404);
+      throw new Error('Booking not found');
+    }
+
+    if (booking.owner.toString() !== req.user._id.toString()) {
+      res.status(401);
+      throw new Error('User not authorized to manage this booking');
+    }
+
+    if (booking.status !== 'Booked') {
+      res.status(400);
+      throw new Error('Only booked sessions can be started');
+    }
+
+    // Check if booking has OTP (mobile booking)
+    if (!booking.otp) {
+      res.status(400);
+      throw new Error('This booking does not require OTP verification (walk-in booking)');
+    }
+
+    // Verify OTP
+    if (booking.otp !== otp) {
+      res.status(400);
+      throw new Error('Invalid OTP. Please check the OTP provided by the customer.');
+    }
+
+    // OTP is valid, proceed with system assignment
+    const cafe = await Cafe.findById(booking.cafe);
+    if (!cafe) {
+      res.status(404);
+      throw new Error('Cafe not found');
+    }
+
+    // Validate and assign systems
+    const assignedSystems = [];
+    for (const assignment of systemAssignments) {
+      const { roomType, systemIds } = assignment;
+      
+      const room = cafe.rooms.find(r => r.name === roomType);
+      if (!room) {
+        res.status(400);
+        throw new Error(`Room '${roomType}' not found`);
+      }
+
+      for (const systemId of systemIds) {
+        const system = room.systems.find(s => s.systemId === systemId);
+        if (!system) {
+          res.status(400);
+          throw new Error(`System '${systemId}' not found in '${roomType}'`);
+        }
+
+        if (system.status !== 'Available') {
+          res.status(400);
+          throw new Error(`System '${systemId}' is not available`);
+        }
+
+        // Mark system as active
+        system.status = 'Active';
+        system.activeBooking = booking._id;
+        
+        assignedSystems.push({
+          systemId: systemId,
+          roomType: roomType
+        });
+      }
+    }
+
+    // Update booking
+    booking.status = 'Active';
+    booking.assignedSystems = assignedSystems;
+    
+    // Set session start time to current time when session actually starts
+    const sessionStartTime = new Date();
+    booking.sessionStartTime = sessionStartTime;
+    
+    // Calculate session end time based on actual session start time + duration
+    const calculatedEndTime = new Date(sessionStartTime.getTime() + (booking.duration * 60 * 60 * 1000));
+    booking.sessionEndTime = calculatedEndTime;
+    booking.calculatedEndTime = calculatedEndTime;
+    
+    console.log(`🎯 OTP-verified session started for booking ${booking._id}:`);
+    console.log(`   Customer: ${booking.customer?.name || 'Mobile Customer'}`);
+    console.log(`   OTP: ${otp} (verified)`);
+    console.log(`   Session Start: ${sessionStartTime.toLocaleString()}`);
+    console.log(`   Duration: ${booking.duration} hours`);
+    console.log(`   Calculated End: ${calculatedEndTime.toLocaleString()}`);
+
+    await cafe.save();
+    await booking.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified and session started successfully',
+      data: { booking, cafe }
+    });
+  } catch (error) {
+    res.status(res.statusCode || 400).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createBooking,
   createWalkInBooking,
@@ -879,4 +1065,6 @@ module.exports = {
   getAvailableSystemsForAssignment,
   autoCompleteExpiredSessions,
   updateSystemMaintenanceStatus,
+  verifyOTP,
+  verifyOTPAndStartSession,
 };

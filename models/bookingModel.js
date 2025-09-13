@@ -127,6 +127,18 @@ const bookingSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // NEW: OTP for mobile booking verification (only for mobile bookings, not walk-ins)
+    otp: {
+      type: String,
+      length: 6,
+      validate: {
+        validator: function(v) {
+          // OTP is optional (only for mobile bookings)
+          return !v || /^\d{6}$/.test(v);
+        },
+        message: 'OTP must be exactly 6 digits'
+      }
+    },
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt
