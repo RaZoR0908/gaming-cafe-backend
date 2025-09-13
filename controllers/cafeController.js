@@ -144,10 +144,104 @@ const getCafesNearMe = async (req, res) => {
 const getMyCafe = async (req, res) => {
   try {
     const cafe = await Cafe.findOne({ owner: req.user.id });
+    
+    if (cafe) {
+      // Add safeguard: Auto-correct inconsistent system statuses
+      await correctSystemStatuses(cafe);
+    }
+    
     res.json(cafe); // Will return the cafe object or null if not found
   } catch (error) {
     res.status(500).json({ message: 'Server Error' });
   }
+};
+
+// Helper function to correct system statuses
+const correctSystemStatuses = async (cafe) => {
+  const now = new Date();
+  let cafeUpdated = false;
+  const Booking = require('../models/bookingModel');
+  
+  // Check all systems for inconsistencies
+  for (const room of cafe.rooms) {
+    for (const system of room.systems) {
+      if (system.status === 'Active' && system.activeBooking) {
+        try {
+          // Get the booking to check if it's actually expired
+          const booking = await Booking.findById(system.activeBooking);
+          
+          if (!booking) {
+            // Booking doesn't exist, free the system
+            console.log(`🔧 Auto-correcting system ${system.systemId} - booking not found`);
+            system.status = 'Available';
+            system.activeBooking = null;
+            system.sessionStartTime = null;
+            system.sessionEndTime = null;
+            system.sessionDuration = null;
+            cafeUpdated = true;
+            continue;
+          }
+          
+          if (booking.status !== 'Active') {
+            // Booking is not active, free the system
+            console.log(`🔧 Auto-correcting system ${system.systemId} - booking status is ${booking.status}`);
+            system.status = 'Available';
+            system.activeBooking = null;
+            system.sessionStartTime = null;
+            system.sessionEndTime = null;
+            system.sessionDuration = null;
+            cafeUpdated = true;
+            continue;
+          }
+          
+          // Check if booking has expired based on calculatedEndTime
+          let sessionEnd;
+          if (booking.calculatedEndTime) {
+            sessionEnd = new Date(booking.calculatedEndTime);
+          } else if (booking.sessionStartTime && booking.duration) {
+            const sessionStart = new Date(booking.sessionStartTime);
+            sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+          } else {
+            // No timing data, free the system
+            console.log(`🔧 Auto-correcting system ${system.systemId} - booking missing timing data`);
+            system.status = 'Available';
+            system.activeBooking = null;
+            system.sessionStartTime = null;
+            system.sessionEndTime = null;
+            system.sessionDuration = null;
+            cafeUpdated = true;
+            continue;
+          }
+          
+          if (sessionEnd <= now) {
+            // Session has expired, free the system and complete the booking
+            console.log(`🔧 Auto-correcting system ${system.systemId} - session expired`);
+            system.status = 'Available';
+            system.activeBooking = null;
+            system.sessionStartTime = null;
+            system.sessionEndTime = null;
+            system.sessionDuration = null;
+            cafeUpdated = true;
+            
+            // Also complete the booking
+            booking.status = 'Completed';
+            await booking.save();
+            console.log(`🔧 Auto-completed booking ${booking._id}`);
+          }
+        } catch (error) {
+          console.error(`Error checking system ${system.systemId}:`, error.message);
+        }
+      }
+    }
+  }
+  
+  // Save corrections if any were made
+  if (cafeUpdated) {
+    await cafe.save();
+    console.log(`🔧 Auto-corrected inconsistent system statuses in cafe ${cafe.name}`);
+  }
+  
+  return cafeUpdated;
 };
 
 module.exports = {

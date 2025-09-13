@@ -349,15 +349,25 @@ const getOwnerBookings = async (req, res) => {
     });
 
     for (const booking of pastBookings) {
-      const bookingStartHour = timeToHour(booking.startTime);
-      const bookingDateTime = new Date(booking.bookingDate);
-      bookingDateTime.setHours(bookingStartHour, 0, 0, 0);
+      // Use sessionStartTime + duration instead of booking time
+      if (booking.sessionStartTime && booking.duration) {
+        const sessionStart = new Date(booking.sessionStartTime);
+        const sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+        
+        console.log(`🔍 Checking booking ${booking._id}:`);
+        console.log(`   Session Start: ${sessionStart.toLocaleString()}`);
+        console.log(`   Duration: ${booking.duration} hours`);
+        console.log(`   Session End: ${sessionEnd.toLocaleString()}`);
+        console.log(`   Current Time: ${now.toLocaleString()}`);
+        console.log(`   Expired: ${sessionEnd <= now}`);
 
-      const bookingEndDateTime = new Date(bookingDateTime.getTime() + booking.duration * 60 * 60 * 1000);
-
-      if (bookingEndDateTime < now) {
-        booking.status = 'Completed';
-        await booking.save();
+        if (sessionEnd <= now) {
+          console.log(`✅ Auto-completing expired booking ${booking._id}`);
+          booking.status = 'Completed';
+          await booking.save();
+        }
+      } else {
+        console.log(`⚠️ Booking ${booking._id} missing session timing data - skipping auto-complete`);
       }
     }
 
@@ -508,12 +518,21 @@ const assignSystemsAndStartSession = async (req, res) => {
     // Update booking
     booking.status = 'Active';
     booking.assignedSystems = assignedSystems;
-    booking.sessionStartTime = new Date();
     
-    // Calculate session end time
-    const sessionEndTime = new Date();
-    sessionEndTime.setTime(sessionEndTime.getTime() + (booking.duration * 60 * 60 * 1000));
-    booking.sessionEndTime = sessionEndTime;
+    // Set session start time to current time when session actually starts
+    const sessionStartTime = new Date();
+    booking.sessionStartTime = sessionStartTime;
+    
+    // Calculate session end time based on actual session start time + duration
+    const calculatedEndTime = new Date(sessionStartTime.getTime() + (booking.duration * 60 * 60 * 1000));
+    booking.sessionEndTime = calculatedEndTime;
+    booking.calculatedEndTime = calculatedEndTime;
+    
+    console.log(`🎯 Session started for booking ${booking._id}:`);
+    console.log(`   Session Start: ${sessionStartTime.toLocaleString()}`);
+    console.log(`   Duration: ${booking.duration} hours`);
+    console.log(`   Calculated End: ${calculatedEndTime.toLocaleString()}`);
+    console.log(`   Expected End Time: ${calculatedEndTime.toLocaleTimeString()}`);
 
     await cafe.save();
     await booking.save();
@@ -672,18 +691,37 @@ const autoCompleteExpiredSessions = async (req, res) => {
       status: 'Active'
     });
     
-    // Filter bookings that have actually expired based on sessionStartTime + duration
+    // Filter bookings that have actually expired based on calculatedEndTime
     const expiredBookings = activeBookings.filter(booking => {
       if (!booking.sessionStartTime || !booking.duration) {
+        console.log(`⚠️ Booking ${booking._id} missing timing data - sessionStartTime: ${booking.sessionStartTime}, duration: ${booking.duration}`);
         return false; // Skip bookings without proper timing data
       }
       
-      // Calculate when the session should actually end
-      const sessionStart = new Date(booking.sessionStartTime);
-      const sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+      // Use calculatedEndTime if available, otherwise calculate it
+      let sessionEnd;
+      if (booking.calculatedEndTime) {
+        sessionEnd = new Date(booking.calculatedEndTime);
+      } else {
+        // Fallback: calculate from sessionStartTime + duration
+        const sessionStart = new Date(booking.sessionStartTime);
+        sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+      }
       
       // Check if the session has actually ended
-      return sessionEnd <= now;
+      const hasExpired = sessionEnd <= now;
+      
+      if (hasExpired) {
+        const timeDiff = now.getTime() - sessionEnd.getTime();
+        const minutesOverdue = Math.ceil(timeDiff / (1000 * 60));
+        console.log(`⏰ Session ${booking._id} has expired: Started ${new Date(booking.sessionStartTime).toLocaleTimeString()}, Duration ${booking.duration}h, Ended ${sessionEnd.toLocaleTimeString()}, Current ${now.toLocaleTimeString()}, Overdue by ${minutesOverdue} minutes`);
+      } else {
+        const timeDiff = sessionEnd.getTime() - now.getTime();
+        const minutesRemaining = Math.ceil(timeDiff / (1000 * 60));
+        console.log(`✅ Session ${booking._id} still active: Started ${new Date(booking.sessionStartTime).toLocaleTimeString()}, Duration ${booking.duration}h, Ends ${sessionEnd.toLocaleTimeString()}, Current ${now.toLocaleTimeString()}, ${minutesRemaining} minutes remaining`);
+      }
+      
+      return hasExpired;
     });
 
     if (expiredBookings.length === 0) {

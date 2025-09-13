@@ -36,24 +36,34 @@ const autoCompleteExpiredSessions = async () => {
       status: 'Active'
     });
     
-    // Filter bookings that have actually expired based on sessionStartTime + duration
+    // Filter bookings that have actually expired based on calculatedEndTime
     const expiredBookings = activeBookings.filter(booking => {
       if (!booking.sessionStartTime || !booking.duration) {
         console.log(`⚠️ Booking ${booking._id} missing timing data - sessionStartTime: ${booking.sessionStartTime}, duration: ${booking.duration}`);
         return false; // Skip bookings without proper timing data
       }
       
-      // Calculate when the session should actually end
-      const sessionStart = new Date(booking.sessionStartTime);
-      const sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+      // Use calculatedEndTime if available, otherwise calculate it
+      let sessionEnd;
+      if (booking.calculatedEndTime) {
+        sessionEnd = new Date(booking.calculatedEndTime);
+      } else {
+        // Fallback: calculate from sessionStartTime + duration
+        const sessionStart = new Date(booking.sessionStartTime);
+        sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+      }
       
       // Check if the session has actually ended
       const hasExpired = sessionEnd <= now;
       
       if (hasExpired) {
-        console.log(`⏰ Session ${booking._id} has expired: Started ${sessionStart.toLocaleTimeString()}, Duration ${booking.duration}h, Ended ${sessionEnd.toLocaleTimeString()}, Current ${now.toLocaleTimeString()}`);
+        const timeDiff = now.getTime() - sessionEnd.getTime();
+        const minutesOverdue = Math.ceil(timeDiff / (1000 * 60));
+        console.log(`⏰ Session ${booking._id} has expired: Started ${new Date(booking.sessionStartTime).toLocaleTimeString()}, Duration ${booking.duration}h, Ended ${sessionEnd.toLocaleTimeString()}, Current ${now.toLocaleTimeString()}, Overdue by ${minutesOverdue} minutes`);
       } else {
-        console.log(`✅ Session ${booking._id} still active: Started ${sessionStart.toLocaleTimeString()}, Duration ${booking.duration}h, Ends ${sessionEnd.toLocaleTimeString()}, Current ${now.toLocaleTimeString()}`);
+        const timeDiff = sessionEnd.getTime() - now.getTime();
+        const minutesRemaining = Math.ceil(timeDiff / (1000 * 60));
+        console.log(`✅ Session ${booking._id} still active: Started ${new Date(booking.sessionStartTime).toLocaleTimeString()}, Duration ${booking.duration}h, Ends ${sessionEnd.toLocaleTimeString()}, Current ${now.toLocaleTimeString()}, ${minutesRemaining} minutes remaining`);
       }
       
       return hasExpired;
@@ -107,8 +117,13 @@ const autoCompleteExpiredSessions = async () => {
             }
 
             // Double-check that the session has actually expired before marking as completed
-            const sessionStart = new Date(booking.sessionStartTime);
-            const sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+            let sessionEnd;
+            if (booking.calculatedEndTime) {
+              sessionEnd = new Date(booking.calculatedEndTime);
+            } else {
+              const sessionStart = new Date(booking.sessionStartTime);
+              sessionEnd = new Date(sessionStart.getTime() + (booking.duration * 60 * 60 * 1000));
+            }
             
             if (sessionEnd <= now) {
               // Update booking status

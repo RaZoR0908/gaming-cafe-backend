@@ -118,6 +118,10 @@ const bookingSchema = new mongoose.Schema(
     sessionEndTime: {
       type: Date,
     },
+    // NEW: Calculated end time based on sessionStartTime + duration
+    calculatedEndTime: {
+      type: Date,
+    },
     // NEW: Track if booking is permanently cancelled (after 10 minutes)
     permanentlyCancelled: {
       type: Boolean,
