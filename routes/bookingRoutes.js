@@ -3,6 +3,7 @@ const router = express.Router();
 // 1. Update the import to include all necessary functions
 const {
   createBooking,
+  checkAvailability,
   getMyBookings,
   getOwnerBookings,
   updateBookingStatus,
@@ -22,6 +23,8 @@ const { protect, isOwner } = require('../middleware/authMiddleware');
 // --- CUSTOMER ROUTES ---
 // Create a new booking
 router.route('/').post(protect, createBooking);
+// Check availability for a booking
+router.route('/check-availability').post(protect, checkAvailability);
 // Get all bookings for the logged-in customer
 router.route('/my-bookings').get(protect, getMyBookings);
 

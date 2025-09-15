@@ -139,6 +139,18 @@ const bookingSchema = new mongoose.Schema(
         message: 'OTP must be exactly 6 digits'
       }
     },
+    // NEW: Friend count for group bookings (mobile app)
+    friendCount: {
+      type: Number,
+      default: 1,
+      min: 1
+    },
+    // NEW: Extended time in hours (when session is extended by cafe owner)
+    extendedTime: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt
