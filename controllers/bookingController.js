@@ -601,16 +601,35 @@ const extendBooking = async (req, res) => {
         throw new Error('Cafe not found');
       }
 
-      const room = cafe.rooms.find(r => r.name === booking.roomType);
-      const system = room ? room.systems.find(s => s.type === booking.systemType) : null;
+      let priceToAdd = 0;
 
-      if (!system) {
-        res.status(400);
-        throw new Error(`System type from original booking not found.`);
+      if (booking.systemsBooked && booking.systemsBooked.length > 0) {
+        // Group booking - calculate price for all systems
+        for (const systemBooking of booking.systemsBooked) {
+          const room = cafe.rooms.find(r => r.name === systemBooking.roomType);
+          if (room) {
+            const system = room.systems.find(s => s.type === systemBooking.systemType);
+            if (system) {
+              const systemPrice = systemBooking.numberOfSystems * system.pricePerHour * hoursToAdd;
+              priceToAdd += systemPrice;
+            }
+          }
+        }
+      } else {
+        // Single booking - use legacy fields
+        const room = cafe.rooms.find(r => r.name === booking.roomType);
+        if (room) {
+          const system = room.systems.find(s => s.type === booking.systemType);
+          if (system) {
+            priceToAdd = (booking.numberOfSystems || 1) * system.pricePerHour * hoursToAdd;
+          }
+        }
       }
 
-      const pricePerHour = system.pricePerHour;
-      const priceToAdd = hoursToAdd * pricePerHour;
+      if (priceToAdd === 0) {
+        res.status(400);
+        throw new Error('Unable to calculate extension price - system information not found');
+      }
 
       booking.duration += parseFloat(hoursToAdd);
       booking.totalPrice += priceToAdd;
