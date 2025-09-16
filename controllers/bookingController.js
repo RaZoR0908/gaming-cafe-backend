@@ -500,7 +500,8 @@ const getSlotAvailability = async (req, res) => {
 
 const getMyBookings = async (req, res) => {
   try {
-    const bookings = await Booking.find({ customer: req.user._id });
+    const bookings = await Booking.find({ customer: req.user._id })
+      .sort({ createdAt: -1 }); // Sort by creation time, latest first
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ message: 'Server Error' });
