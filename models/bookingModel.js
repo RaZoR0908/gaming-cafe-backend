@@ -96,7 +96,7 @@ const bookingSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ['Booked', 'Active', 'Completed', 'Cancelled'],
+      enum: ['Booked', 'Confirmed', 'Active', 'Completed', 'Cancelled'],
       default: 'Booked',
     },
     // NEW: Track assigned systems for active sessions
