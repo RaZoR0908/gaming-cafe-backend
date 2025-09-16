@@ -6,6 +6,7 @@ const {
   getCafeById,
   updateCafe,
   deleteCafe,
+  toggleCafeStatus,
   getCafesNearMe,
   getMyCafe,
 } = require('../controllers/cafeController');
@@ -26,6 +27,9 @@ router.route('/my-cafe').get(protect, isOwner, getMyCafe); // Protected
 
 // Specific route: /api/cafes/near-me
 router.route('/near-me').get(getCafesNearMe); // Public
+
+// Specific route: /api/cafes/:id/toggle-status
+router.route('/:id/toggle-status').patch(protect, isOwner, toggleCafeStatus); // Protected
 
 // Generic route with a parameter: /api/cafes/:id
 // This MUST come last.

@@ -120,6 +120,30 @@ const deleteCafe = async (req, res) => {
   }
 };
 
+// Toggle cafe open/close status
+const toggleCafeStatus = async (req, res) => {
+  try {
+    const cafe = await Cafe.findById(req.params.id);
+    if (!cafe) {
+      return res.status(404).json({ message: 'Cafe not found' });
+    }
+    
+    if (cafe.owner.toString() !== req.user.id.toString()) {
+      return res.status(401).json({ message: 'User not authorized' });
+    }
+    
+    cafe.isOpen = !cafe.isOpen;
+    const updatedCafe = await cafe.save();
+    
+    res.json({
+      message: `Cafe ${cafe.isOpen ? 'opened' : 'closed'} successfully`,
+      cafe: updatedCafe
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const getCafesNearMe = async (req, res) => {
   try {
     const { lng, lat, distance } = req.query;
@@ -250,6 +274,7 @@ module.exports = {
   getCafeById,
   updateCafe,
   deleteCafe,
+  toggleCafeStatus,
   getCafesNearMe,
   getMyCafe,
 };

@@ -103,6 +103,11 @@ const cafeSchema = new mongoose.Schema({
     trim: true,
     maxlength: 500, // Limit description to 500 characters
   },
+  // Open/Close status for temporary closure
+  isOpen: {
+    type: Boolean,
+    default: true, // Cafes are open by default
+  },
 }, {
   // Automatically adds 'createdAt' and 'updatedAt' fields.
   timestamps: true,
