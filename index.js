@@ -212,8 +212,9 @@ app.use((req, res, next) => {
 // 2. Tell the app to use the routes
 app.use('/api/auth', authRoutes);
 app.use('/api/cafes', cafeRoutes);
-app.use('/api/bookings', bookingRoutes); // <-- Add this line
-app.use('/api/reviews', reviewRoutes); 
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/payments', require('./routes/paymentRoutes')); 
 
 
 // Manual sync endpoint for testing

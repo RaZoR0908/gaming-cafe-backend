@@ -96,8 +96,8 @@ const bookingSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ['Booked', 'Confirmed', 'Active', 'Completed', 'Cancelled'],
-      default: 'Booked',
+      enum: ['Pending Payment', 'Booked', 'Confirmed', 'Active', 'Completed', 'Cancelled'],
+      default: 'Pending Payment',
     },
     // NEW: Track assigned systems for active sessions
     assignedSystems: [{
@@ -150,6 +150,31 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0
+    },
+    // NEW: Payment related fields
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'completed', 'failed', 'refunded'],
+      default: 'pending'
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['wallet', 'card', 'upi', 'netbanking', 'cash'],
+      default: null
+    },
+    isPaid: {
+      type: Boolean,
+      default: false
+    },
+    // NEW: Extension payment fields
+    extensionPaymentStatus: {
+      type: String,
+      enum: ['pending', 'completed', 'failed'],
+      default: null
+    },
+    extensionPaymentAmount: {
+      type: Number,
+      default: 0
     },
   },
   {

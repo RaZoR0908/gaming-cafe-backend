@@ -132,6 +132,9 @@ const createBooking = async (req, res) => {
         phoneNumber,
         friendCount: friendCount || 1,
         otp: generateOTP(), // Generate OTP for mobile bookings
+        status: 'Pending Payment', // Set status as pending payment
+        paymentStatus: 'pending',
+        isPaid: false
       });
 
       const createdBooking = await booking.save();
@@ -205,6 +208,9 @@ const createBooking = async (req, res) => {
         totalPrice,
         phoneNumber,
         otp: generateOTP(), // Generate OTP for mobile bookings
+        status: 'Pending Payment', // Set status as pending payment
+        paymentStatus: 'pending',
+        isPaid: false
       });
 
       const createdBooking = await booking.save();
@@ -635,6 +641,10 @@ const extendBooking = async (req, res) => {
       booking.duration += parseFloat(hoursToAdd);
       booking.totalPrice += priceToAdd;
       booking.extendedTime = (booking.extendedTime || 0) + parseFloat(hoursToAdd);
+      
+      // Set extension payment fields for customer to pay
+      booking.extensionPaymentAmount = priceToAdd;
+      booking.extensionPaymentStatus = 'pending';
 
       const updatedBooking = await booking.save();
       res.json(updatedBooking);
