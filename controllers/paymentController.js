@@ -240,7 +240,7 @@ const verifyPayment = async (req, res) => {
         if (booking) {
           if (payment.isExtension) {
             booking.extensionPaymentStatus = 'completed';
-            booking.extensionPaymentAmount = 0;
+            // Keep the original extension payment amount for record-keeping
             console.log('Extension payment completed for booking:', booking._id);
           } else {
             booking.paymentStatus = 'completed';
@@ -388,7 +388,7 @@ const processWalletPayment = async (req, res) => {
     if (booking) {
       if (payment.isExtension) {
         booking.extensionPaymentStatus = 'completed';
-        booking.extensionPaymentAmount = 0;
+        // Keep the original extension payment amount for record-keeping
         console.log('Extension payment completed via wallet for booking:', booking._id);
       } else {
         booking.paymentStatus = 'completed';
