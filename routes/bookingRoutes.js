@@ -17,6 +17,7 @@ const {
   updateSystemMaintenanceStatus,
   verifyOTP,
   verifyOTPAndStartSession,
+  cancelBooking,
 } = require('../controllers/bookingController');
 const { protect, isOwner } = require('../middleware/authMiddleware');
 
@@ -27,6 +28,8 @@ router.route('/').post(protect, createBooking);
 router.route('/check-availability').post(protect, checkAvailability);
 // Get all bookings for the logged-in customer
 router.route('/my-bookings').get(protect, getMyBookings);
+// Cancel a booking (both customer and owner can cancel)
+router.route('/:id/cancel').post(protect, cancelBooking);
 
 // --- OWNER ROUTES ---
 // Get all bookings for a specific cafe owned by the logged-in user

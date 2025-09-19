@@ -1,5 +1,8 @@
 const Booking = require('../models/bookingModel');
 const Cafe = require('../models/cafeModel');
+const Wallet = require('../models/walletModel');
+const Payment = require('../models/paymentModel');
+const User = require('../models/userModel');
 
 // Helper function to generate 6-digit OTP
 const generateOTP = () => {
@@ -561,7 +564,7 @@ const getOwnerBookings = async (req, res) => {
       // This tells the database to find the user linked to the 'customer' ID
       // and include their 'name' in the response.
       .populate('customer', 'name')
-      .sort({ bookingDate: -1, startTime: 1 }); // Sort by most recent
+      .sort({ bookingDate: 1, startTime: 1, createdAt: 1 }); // Sort by date, then time, then creation
 
     res.json(allBookingsForCafe);
   } catch (error) {
@@ -1255,6 +1258,159 @@ const verifyOTPAndStartSession = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Cancel a booking and process refund
+ * @route   POST /api/bookings/:id/cancel
+ * @access  Private/Customer or Owner
+ */
+const cancelBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the booking
+    const booking = await Booking.findById(id);
+    if (!booking) {
+      res.status(404);
+      throw new Error('Booking not found');
+    }
+
+    // Check authorization - either customer or owner can cancel
+    const isCustomer = booking.customer && booking.customer.toString() === req.user._id.toString();
+    const isOwner = booking.owner && booking.owner.toString() === req.user._id.toString();
+    
+    if (!isCustomer && !isOwner) {
+      res.status(401);
+      throw new Error('Not authorized to cancel this booking');
+    }
+
+    // Check if booking can be cancelled
+    if (booking.status !== 'Booked') {
+      res.status(400);
+      throw new Error('Only booked sessions can be cancelled');
+    }
+
+    // Check cancel conditions based on date and time
+    const today = new Date();
+    const bookingDate = new Date(booking.bookingDate);
+    const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    let canCancel = false;
+
+    // If booking is for today, check if within 15 minutes of booking time
+    if (bookingDateOnly.getTime() === todayOnly.getTime()) {
+      const [timeStr, period] = booking.startTime.split(' ');
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      let bookingHour = hours;
+      if (period === 'PM' && hours !== 12) {
+        bookingHour += 12;
+      } else if (period === 'AM' && hours === 12) {
+        bookingHour = 0;
+      }
+      
+      const bookingTime = new Date(booking.bookingDate);
+      bookingTime.setHours(bookingHour, minutes || 0, 0, 0);
+      const timeDiff = today.getTime() - bookingTime.getTime();
+      const minutesDiff = timeDiff / (1000 * 60);
+      
+      canCancel = minutesDiff <= 15;
+    } else {
+      // If booking is for future dates, allow cancellation until that day starts
+      canCancel = bookingDateOnly.getTime() > todayOnly.getTime();
+    }
+
+    if (!canCancel) {
+      res.status(400);
+      throw new Error('Booking cannot be cancelled at this time. Cancellation is only allowed within 15 minutes of booking time for today\'s bookings, or anytime before the booking date for future bookings.');
+    }
+
+    // Update booking status
+    booking.status = 'Cancelled';
+    await booking.save();
+
+    // Process refund based on payment method - only for mobile bookings, not walk-ins
+    let refundInfo = null;
+
+    // Only process refunds for mobile bookings (not walk-ins)
+    if (booking.customer && booking.isPaid && booking.paymentMethod) {
+      // Get cafe name for refund description
+      const cafe = await Cafe.findById(booking.cafe);
+      const cafeName = cafe ? cafe.name : 'Unknown Cafe';
+      
+      if (booking.paymentMethod === 'wallet') {
+        // Refund to wallet
+        const wallet = await Wallet.findOne({ customer: booking.customer });
+        if (wallet) {
+          wallet.balance += booking.totalPrice;
+          
+          // Add refund transaction with cafe name
+          wallet.transactions.push({
+            type: 'credit',
+            amount: booking.totalPrice,
+            method: 'refund',
+            description: `Refund for cancelled booking - ${cafeName}`,
+            bookingId: booking._id
+          });
+          
+          await wallet.save();
+          
+          // Update user's wallet balance
+          const user = await User.findById(booking.customer);
+          if (user) {
+            user.walletBalance = wallet.balance;
+            await user.save();
+          }
+          
+          
+          refundInfo = {
+            method: 'wallet',
+            amount: booking.totalPrice,
+            status: 'completed',
+            message: `₹${booking.totalPrice} has been refunded to your wallet`
+          };
+        }
+      } else if (booking.paymentMethod === 'payu') {
+        // For PayU, create a pending refund record (simulation for development)
+        const refundPayment = new Payment({
+          customer: booking.customer,
+          booking: booking._id,
+          amount: booking.totalPrice,
+          paymentMethod: booking.paymentMethod,
+          paymentGateway: 'payu',
+          paymentStatus: 'refunded',
+          isExtension: false,
+          gatewayResponse: {
+            refundStatus: 'pending',
+            refundId: `REF_${Date.now()}`,
+            message: 'Refund initiated (PayU Test Mode)'
+          }
+        });
+        
+        await refundPayment.save();
+        
+        refundInfo = {
+          method: 'payu',
+          amount: booking.totalPrice,
+          status: 'pending',
+          message: `₹${booking.totalPrice} refund has been initiated. It will be processed within 3-5 business days.`
+        };
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Booking cancelled successfully',
+      data: {
+        booking,
+        refund: refundInfo
+      }
+    });
+
+  } catch (error) {
+    res.status(res.statusCode || 500).json({ message: error.message });
+  }
+};
+
 
 module.exports = {
   createBooking,
@@ -1272,4 +1428,5 @@ module.exports = {
   updateSystemMaintenanceStatus,
   verifyOTP,
   verifyOTPAndStartSession,
+  cancelBooking,
 };
