@@ -1255,6 +1255,7 @@ const verifyOTPAndStartSession = async (req, res) => {
   }
 };
 
+
 module.exports = {
   createBooking,
   createWalkInBooking,

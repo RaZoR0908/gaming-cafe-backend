@@ -410,7 +410,7 @@ const processWalletPayment = async (req, res) => {
   }
 };
 
-// Get wallet balance (unchanged)
+// Get wallet balance with all transactions
 const getWalletBalance = async (req, res) => {
   try {
     let wallet = await Wallet.findOne({ customer: req.user._id });
@@ -423,10 +423,63 @@ const getWalletBalance = async (req, res) => {
       await wallet.save();
     }
 
+    // Get all payment transactions for this customer
+    const payments = await Payment.find({ 
+      customer: req.user._id,
+      paymentStatus: 'completed'
+    }).populate({
+      path: 'booking',
+      select: 'cafe',
+      populate: {
+        path: 'cafe',
+        select: 'name'
+      }
+    }).sort({ createdAt: -1 });
+
+    // Convert payment records to transaction format
+    const paymentTransactions = payments.map(payment => {
+      let description = '';
+      let type = 'debit';
+      
+      if (payment.isWalletTopUp) {
+        type = 'credit';
+        description = `Wallet top-up via ${payment.paymentMethod.toUpperCase()} (PayU)`;
+      } else if (payment.isExtension) {
+        const cafeName = payment.booking?.cafe?.name || 'Gaming Cafe';
+        description = `Extension payment via ${payment.paymentMethod.toUpperCase()} (PayU) - ${cafeName}`;
+      } else {
+        const cafeName = payment.booking?.cafe?.name || 'Gaming Cafe';
+        description = `Gaming session booking via ${payment.paymentMethod.toUpperCase()} (PayU) - ${cafeName}`;
+      }
+
+      return {
+        type,
+        amount: payment.amount,
+        method: payment.paymentMethod === 'wallet' ? 'wallet' : 'online',
+        description,
+        bookingId: payment.booking?._id,
+        createdAt: payment.paidAt || payment.createdAt,
+        paymentId: payment._id,
+        paymentMethod: payment.paymentMethod
+      };
+    });
+
+    // Combine wallet transactions and payment transactions
+    const allTransactions = [
+      ...wallet.transactions.map(tx => ({
+        ...tx.toObject(),
+        source: 'wallet'
+      })),
+      ...paymentTransactions.map(tx => ({
+        ...tx,
+        source: 'payment'
+      }))
+    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
     res.json({
       success: true,
       balance: wallet.balance,
-      transactions: wallet.transactions
+      transactions: allTransactions
     });
   } catch (error) {
     console.error('Get wallet balance error:', error);
