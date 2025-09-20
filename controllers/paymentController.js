@@ -423,10 +423,11 @@ const getWalletBalance = async (req, res) => {
       await wallet.save();
     }
 
-    // Get all payment transactions for this customer
+    // Get all payment transactions for this customer (excluding wallet payments to avoid duplicates)
     const payments = await Payment.find({ 
       customer: req.user._id,
-      paymentStatus: 'completed'
+      paymentStatus: 'completed',
+      paymentMethod: { $ne: 'wallet' } // Exclude wallet payments to prevent duplicates
     }).populate({
       path: 'booking',
       select: 'cafe',
@@ -436,7 +437,7 @@ const getWalletBalance = async (req, res) => {
       }
     }).sort({ createdAt: -1 });
 
-    // Convert payment records to transaction format
+    // Convert payment records to transaction format (only for non-wallet payments)
     const paymentTransactions = payments.map(payment => {
       let description = '';
       let type = 'debit';
@@ -455,7 +456,7 @@ const getWalletBalance = async (req, res) => {
       return {
         type,
         amount: payment.amount,
-        method: payment.paymentMethod === 'wallet' ? 'wallet' : 'online',
+        method: 'online',
         description,
         bookingId: payment.booking?._id,
         createdAt: payment.paidAt || payment.createdAt,
